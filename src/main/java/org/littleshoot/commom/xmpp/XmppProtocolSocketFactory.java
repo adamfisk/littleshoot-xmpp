@@ -10,18 +10,19 @@ import java.util.prefs.Preferences;
 import org.apache.commons.httpclient.ConnectTimeoutException;
 import org.apache.commons.httpclient.params.HttpConnectionParams;
 import org.apache.commons.httpclient.protocol.ProtocolSocketFactory;
+import org.lastbamboo.common.util.SocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class XmppProtocolSocketFactory implements ProtocolSocketFactory {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private final XmppSocketFactory xmppSocketFactory;
+    private final SocketFactory socketFactory;
     private final DefaultXmppUriFactory xmppUriFactory;
     
-    public XmppProtocolSocketFactory(final XmppSocketFactory xmppSocketFactory,
+    public XmppProtocolSocketFactory(final SocketFactory socketFactory,
         final DefaultXmppUriFactory defaultXmppUriFactory) {
-        this.xmppSocketFactory = xmppSocketFactory;
+        this.socketFactory = socketFactory;
         this.xmppUriFactory = defaultXmppUriFactory;
     }
 
@@ -36,8 +37,7 @@ public class XmppProtocolSocketFactory implements ProtocolSocketFactory {
         final InetAddress localAddress, final int localPort, 
         final HttpConnectionParams params) throws IOException,
         UnknownHostException, ConnectTimeoutException {
-        
-        return null;
+        return createSocket(host, port);
     }
 
     public Socket createSocket(final String host, final int port) 
@@ -55,7 +55,7 @@ public class XmppProtocolSocketFactory implements ProtocolSocketFactory {
         final URI uri = this.xmppUriFactory.createXmppUri(host);
         try {
             log.trace("About to create socket...");
-            final Socket sock = this.xmppSocketFactory.newSocket(uri);
+            final Socket sock = this.socketFactory.newSocket(uri);
             log.debug("Got socket!! Returning to HttpClient");
             
             // Note there can appear to be an odd delay after this point if

@@ -6,10 +6,13 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.net.SocketFactory;
 
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
 import org.jivesoftware.smack.Chat;
 import org.jivesoftware.smack.ChatManager;
@@ -17,18 +20,19 @@ import org.jivesoftware.smack.ChatManagerListener;
 import org.jivesoftware.smack.ConnectionConfiguration;
 import org.jivesoftware.smack.ConnectionListener;
 import org.jivesoftware.smack.MessageListener;
-import org.jivesoftware.smack.PacketListener;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.packet.Message;
-import org.jivesoftware.smack.packet.Packet;
 import org.lastbamboo.common.offer.answer.OfferAnswer;
 import org.lastbamboo.common.offer.answer.OfferAnswerConnectException;
 import org.lastbamboo.common.offer.answer.OfferAnswerFactory;
 import org.lastbamboo.common.offer.answer.OfferAnswerListener;
+import org.lastbamboo.common.offer.answer.OfferAnswerMessage;
 import org.lastbamboo.common.offer.answer.OfferAnswerTransactionListener;
+import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
 import org.lastbamboo.common.p2p.P2PConstants;
 import org.lastbamboo.common.p2p.P2PSignalingClient;
+import org.lastbamboo.common.p2p.TcpUdpSocket;
 import org.lastbamboo.common.util.CommonUtils;
 import org.littleshoot.mina.common.ByteBuffer;
 import org.slf4j.Logger;
@@ -41,18 +45,40 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
     private final OfferAnswerFactory offerAnswerFactory;
     private final OfferAnswerListener offerAnswerListener;
 
-    private XMPPConnection xmppConnection;
+    private XMPPConnection xmppOffererConnection;
+    private XMPPConnection xmppAnswererConnection;
+    
+    /**
+     * The executor is used to queue up messages in order. This allows 
+     * different threads to send messages without worrying about them getting
+     * mangled or out of order.
+     */
+    private final ExecutorService messageExecutor = 
+        Executors.newSingleThreadExecutor();
+
+    private final int relayWaitTime;
     
 
     public XmppP2PSignalingClient(final OfferAnswerFactory offerAnswerFactory,
-        final OfferAnswerListener offerAnswerListener) {
+        final OfferAnswerListener offerAnswerListener, 
+        final int relayWaitTime) {
         this.offerAnswerFactory = offerAnswerFactory;
         this.offerAnswerListener = offerAnswerListener;
+        this.relayWaitTime = relayWaitTime;
+    }
+    
+    public Socket newSocket(final URI uri) throws IOException {
+        log.trace ("Creating XMPP socket for URI: {}", uri);
+        final TcpUdpSocket tcpUdpSocket = 
+            new DefaultTcpUdpSocket(this, this.offerAnswerFactory,
+                this.relayWaitTime);
+        
+        return tcpUdpSocket.newSocket(uri);
     }
 
     public String login(final String username, final String password) 
         throws IOException {
-        return persistentXmppConnection(username, password);
+        return persistentXmppConnections(username, password);
     }
     
     public void register(final long userId) {
@@ -73,53 +99,105 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
     public void offer(final URI uri, final byte[] offer,
         final OfferAnswerTransactionListener transactionListener) 
         throws IOException {
+        
+        final Runnable runner = new Runnable() {
+            public void run() {
+                try {
+                    xmppOffer(uri, offer, transactionListener);
+                }
+                catch (final Throwable t) {
+                    log.error("Unexpected throwable", t);
+                }
+            }
+        };
+        
+        this.messageExecutor.execute(runner);
+    }
+    
+    private void xmppOffer(final URI uri, final byte[] offer,
+        final OfferAnswerTransactionListener transactionListener) 
+        throws IOException {
         // We need to convert the URI to a XMPP/Jabber JID.
         final String jid = uri.toASCIIString();
         
-        final ChatManager chatManager = xmppConnection.getChatManager();
-        final Object lock = new Object();
+        final ChatManager chatManager = xmppOffererConnection.getChatManager();
         final Message offerMessage = new Message();
         final String base64 = 
             Base64.encodeBase64URLSafeString(offer);
         offerMessage.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE);
         offerMessage.setProperty(P2PConstants.SDP, base64);
-        final Chat chat = chatManager.createChat(jid,
+        log.info("Creating chat from: {}", xmppOffererConnection.getUser());
+        final Chat chat = chatManager.createChat(jid, 
             new MessageListener() {
                 public void processMessage(final Chat ch, final Message msg) {
-                    log.info("Got message on offerer: {}", msg);
-                    synchronized (lock) {
-                        lock.notifyAll();
+                    log.info("Got answer on offerer: {}", msg);
+
+                    final String base64Body = 
+                        (String) msg.getProperty(P2PConstants.SDP);
+                    final byte[] body;
+                    if (StringUtils.isBlank(base64Body)) {
+                        log.error("No SDP!!");
+                        body = ArrayUtils.EMPTY_BYTE_ARRAY;
+                    }
+                    else {
+                        body = Base64.decodeBase64(base64Body);
+                    }
+                    final OfferAnswerMessage oam = 
+                        new OfferAnswerMessage() {
+                            
+                            public String getTransactionKey() {
+                                return String.valueOf(hashCode());
+                            }
+                            
+                            public ByteBuffer getBody() {
+                                return ByteBuffer.wrap(body);
+                            }
+                        };
+                        
+                    final Object obj = 
+                        msg.getProperty(P2PConstants.MESSAGE_TYPE);
+                    if (obj == null) {
+                        log.error("No message type!!");
+                        return;
+                    }
+                    final int type = (Integer) obj;
+                    switch (type) {
+                        case P2PConstants.INVITE_OK:
+                            transactionListener.onTransactionSucceeded(oam);
+                            break;
+                        case P2PConstants.INVITE_ERROR:
+                            transactionListener.onTransactionFailed(oam);
+                            break;
+                        default:
+                            log.error("Did not recognize type: " + type);
                     }
                 }
             });
         
-        log.info("Sending message to: {}", jid);
+        log.info("Message listeners just after OFFER: {}", chat.getListeners());
+        log.info("Sending INVITE to: {}", jid);
         try {
             chat.sendMessage(offerMessage);
         } catch (final XMPPException e1) {
             log.error("Could not send offer!!", e1);
             throw new IOException("Could not send offer", e1);
         }
-        
-        synchronized (lock) {
-            try {
-                lock.wait(30 * 1000);
-            } catch (final InterruptedException e) {
-                log.error("Interrupted while waiting?", e);
-            }
-        }
     }
     
-    private String persistentXmppConnection(final String username, 
+    private String persistentXmppConnections(final String username, 
         final String password) throws IOException {
         XMPPException exc = null;
         for (int i = 0; i < 10; i++) {
             try {
                 log.info("Attempting XMPP connection...");
-                final XMPPConnection conn = 
+                this.xmppOffererConnection = 
                     singleXmppConnection(username, password);
-                addChatManagerLister(conn);
-                return conn.getUser();
+                log.info("Created offerer");
+                this.xmppAnswererConnection = 
+                    singleXmppConnection(username, password);
+                log.info("Created answerer");
+                addChatManagerListener(this.xmppAnswererConnection);
+                return this.xmppAnswererConnection.getUser();
             } catch (final XMPPException e) {
                 final String msg = "Error creating XMPP connection";
                 log.error(msg, e);
@@ -134,47 +212,48 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
         }
     }
     
-    private void addChatManagerLister(final XMPPConnection conn) {
+    private void addChatManagerListener(final XMPPConnection conn) {
 
+
+        // TODO: Add a roster listener and make sure we're only processing 
+        // messages from users on our roster.
         final ChatManager cm = conn.getChatManager();
         cm.addChatListener(new ChatManagerListener() {
-            
             public void chatCreated(final Chat chat, 
                 final boolean createdLocally) {
-                log.info("Created a chat!!");
-               
-                
-                final String participant = chat.getParticipant();
-                // We need to listen for the unavailability of clients we're 
-                // chatting with so we can disconnect from their associated 
-                // remote servers.
-                final PacketListener pl = new PacketListener() {
-                    public void processPacket(final Packet pack) {
-                        log.info("Got packet: {}", pack);
-                    }
-                };
-                // Register the listener.
-                conn.addPacketListener(pl, null);
-                
-                final MessageListener ml = new MessageListener() {
+                log.info("Created a chat with: {}", chat.getParticipant());
+                log.info("I am: {}", conn.getUser());
+                log.info("Message listeners: {}", chat.getListeners());
+                chat.addMessageListener(new MessageListener() {
                     
-                    public void processMessage(final Chat ch, final Message m) {
-                        log.info("Got message on answerer: {}", m);
+                    public void processMessage(final Chat ch, final Message msg) {
+                        log.info("Got message: {}", msg);
+                        final Object obj = 
+                            msg.getProperty(P2PConstants.MESSAGE_TYPE);
+                        if (obj == null) {
+                            log.error("No message type!!");
+                            return;
+                        }
+
                         final int mt = 
-                            (Integer) m.getProperty(P2PConstants.MESSAGE_TYPE);
+                            (Integer) msg.getProperty(P2PConstants.MESSAGE_TYPE);
                         switch (mt) {
                             case P2PConstants.INVITE:
+                                log.error("Processing INVITE");
+                                XmppUtils.printMessage(msg);
                                 final String sdp = 
-                                    (String) m.getProperty(P2PConstants.SDP);
+                                    (String) msg.getProperty(P2PConstants.SDP);
                                 if (StringUtils.isNotBlank(sdp)) {
                                     processSdp(ch, Base64.decodeBase64(sdp));
                                 }
                                 break;
+                            default:
+                                log.error("Unknown message on aswerer: "+mt);
+                                XmppUtils.printMessage(msg);
+                                break;
                         }
                     }
-
-                };
-                chat.addMessageListener(ml);
+                });
             }
         });
     }
@@ -193,6 +272,7 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
                 CommonUtils.toString(body), e);
             final Message msg = new Message();
             msg.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_ERROR);
+            msg.setTo(chat.getParticipant());
             try {
                 chat.sendMessage(msg);
             } catch (final XMPPException e1) {
@@ -206,9 +286,11 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
         final Message msg = new Message();
         msg.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_OK);
         msg.setProperty(P2PConstants.SDP, Base64.encodeBase64String(answer));
-        log.info("Sending INVITE OK!!");
+        msg.setTo(chat.getParticipant());
+        log.info("Sending INVITE OK to {}", msg.getTo());
         try {
             chat.sendMessage(msg);
+            log.info("Sent INVITE OK");
         } catch (final XMPPException e) {
             log.error("Could not send error message", e);
         }
@@ -228,24 +310,23 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
         config.setSocketFactory(new SocketFactory() {
             
             @Override
-            public Socket createSocket(final InetAddress host, 
-                final int port, final InetAddress localHost,
-                final int localPort) throws IOException {
+            public Socket createSocket(final InetAddress host, final int port, 
+                final InetAddress localHost, final int localPort) 
+                throws IOException {
                 // We ignore the local port binding.
                 return createSocket(host, port);
             }
             
             @Override
-            public Socket createSocket(final String host, 
-                final int port, final InetAddress localHost,
-                final int localPort)
+            public Socket createSocket(final String host, final int port, 
+                final InetAddress localHost, final int localPort)
                 throws IOException, UnknownHostException {
                 // We ignore the local port binding.
                 return createSocket(host, port);
             }
             
             @Override
-            public Socket createSocket(final InetAddress host, int port) 
+            public Socket createSocket(final InetAddress host, final int port) 
                 throws IOException {
                 log.info("Creating socket");
                 final Socket sock = new Socket();
@@ -262,16 +343,22 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
             }
         });
         
-        this.xmppConnection = new XMPPConnection(config);
-        xmppConnection.connect();
+        return newConnection(username, password, config);
+    }
+
+    private XMPPConnection newConnection(final String username, 
+        final String password, final ConnectionConfiguration config) 
+        throws XMPPException {
+        final XMPPConnection conn = new XMPPConnection(config);
+        conn.connect();
         
         // We have a limited number of bytes to work with here, so we just
         // append the MAC straight after the "MG".
         //final String id = "MG"+macAddress;
         
-        xmppConnection.login(username, password, "SHOOT-");
+        conn.login(username, password, "SHOOT-");
         
-        while (!xmppConnection.isAuthenticated()) {
+        while (!conn.isAuthenticated()) {
             log.info("Waiting for authentication");
             try {
                 Thread.sleep(1000);
@@ -280,23 +367,7 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
             }
         }
         
-        /*
-        final Roster roster = xmpp.getRoster();
-        
-        roster.addRosterListener(new RosterListener() {
-            public void entriesDeleted(Collection<String> addresses) {}
-            public void entriesUpdated(Collection<String> addresses) {}
-            public void presenceChanged(final Presence presence) {
-                final String from = presence.getFrom();
-
-            }
-            public void entriesAdded(final Collection<String> addresses) {
-                log.info("Entries added: "+addresses);
-            }
-        });
-        */
-        
-        xmppConnection.addConnectionListener(new ConnectionListener() {
+        conn.addConnectionListener(new ConnectionListener() {
             
             public void reconnectionSuccessful() {
                 log.info("Reconnection successful...");
@@ -313,7 +384,7 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
             public void connectionClosedOnError(final Exception e) {
                 log.info("XMPP connection closed on error", e);
                 try {
-                    persistentXmppConnection(username, password);
+                    persistentXmppConnections(username, password);
                 } catch (final IOException e1) {
                     log.error("Could not re-establish connection?", e1);
                 }
@@ -322,13 +393,13 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
             public void connectionClosed() {
                 log.info("XMPP connection closed. Creating new connection.");
                 try {
-                    persistentXmppConnection(username, password);
+                    persistentXmppConnections(username, password);
                 } catch (final IOException e1) {
                     log.error("Could not re-establish connection?", e1);
                 }
             }
         });
         
-        return xmppConnection;
+        return conn;
     }
 }
