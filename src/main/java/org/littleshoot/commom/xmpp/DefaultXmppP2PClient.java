@@ -80,7 +80,12 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
 
     public String login(final String username, final String password) 
         throws IOException {
-        return persistentXmppConnections(username, password);
+        return persistentXmppConnections(username, password, "SHOOT-");
+    }
+    
+    public String login(final String username, final String password,
+        final String id) throws IOException {
+        return persistentXmppConnections(username, password, id);
     }
     
     public void register(final long userId) {
@@ -187,16 +192,16 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     }
     
     private String persistentXmppConnections(final String username, 
-        final String password) throws IOException {
+        final String password, final String id) throws IOException {
         XMPPException exc = null;
         for (int i = 0; i < 10; i++) {
             try {
                 log.info("Attempting XMPP connection...");
                 this.xmppOffererConnection = 
-                    singleXmppConnection(username, password);
+                    singleXmppConnection(username, password, id);
                 log.info("Created offerer");
                 this.xmppAnswererConnection = 
-                    singleXmppConnection(username, password);
+                    singleXmppConnection(username, password, id);
                 log.info("Created answerer");
                 addChatManagerListener(this.xmppAnswererConnection);
                 return this.xmppAnswererConnection.getUser();
@@ -303,7 +308,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     }
 
     private XMPPConnection singleXmppConnection(final String username, 
-        final String password) throws XMPPException {
+        final String password, final String id) throws XMPPException {
         final ConnectionConfiguration config = 
             new ConnectionConfiguration("talk.google.com", 5222, "gmail.com");
         config.setCompressionEnabled(true);
@@ -345,20 +350,16 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             }
         });
         
-        return newConnection(username, password, config);
+        return newConnection(username, password, config, id);
     }
 
     private XMPPConnection newConnection(final String username, 
-        final String password, final ConnectionConfiguration config) 
-        throws XMPPException {
+        final String password, final ConnectionConfiguration config,
+        final String id) throws XMPPException {
         final XMPPConnection conn = new XMPPConnection(config);
         conn.connect();
         
-        // We have a limited number of bytes to work with here, so we just
-        // append the MAC straight after the "MG".
-        //final String id = "MG"+macAddress;
-        
-        conn.login(username, password, "SHOOT-");
+        conn.login(username, password, id);
         
         while (!conn.isAuthenticated()) {
             log.info("Waiting for authentication");
@@ -386,7 +387,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             public void connectionClosedOnError(final Exception e) {
                 log.info("XMPP connection closed on error", e);
                 try {
-                    persistentXmppConnections(username, password);
+                    persistentXmppConnections(username, password, id);
                 } catch (final IOException e1) {
                     log.error("Could not re-establish connection?", e1);
                 }
@@ -395,7 +396,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             public void connectionClosed() {
                 log.info("XMPP connection closed. Creating new connection.");
                 try {
-                    persistentXmppConnections(username, password);
+                    persistentXmppConnections(username, password, id);
                 } catch (final IOException e1) {
                     log.error("Could not re-establish connection?", e1);
                 }
