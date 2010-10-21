@@ -31,14 +31,16 @@ import org.lastbamboo.common.offer.answer.OfferAnswerMessage;
 import org.lastbamboo.common.offer.answer.OfferAnswerTransactionListener;
 import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
 import org.lastbamboo.common.p2p.P2PConstants;
-import org.lastbamboo.common.p2p.P2PSignalingClient;
 import org.lastbamboo.common.p2p.TcpUdpSocket;
 import org.lastbamboo.common.util.CommonUtils;
 import org.littleshoot.mina.common.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class XmppP2PSignalingClient implements P2PSignalingClient {
+/**
+ * Default implementation of an XMPP P2P client connection.
+ */
+public class DefaultXmppP2PClient implements XmppP2PClient {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     
@@ -59,7 +61,7 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
     private final int relayWaitTime;
     
 
-    public XmppP2PSignalingClient(final OfferAnswerFactory offerAnswerFactory,
+    public DefaultXmppP2PClient(final OfferAnswerFactory offerAnswerFactory,
         final OfferAnswerListener offerAnswerListener, 
         final int relayWaitTime) {
         this.offerAnswerFactory = offerAnswerFactory;
@@ -401,5 +403,9 @@ public class XmppP2PSignalingClient implements P2PSignalingClient {
         });
         
         return conn;
+    }
+
+    public XMPPConnection getXmppConnection() {
+        return xmppOffererConnection;
     }
 }
