@@ -46,6 +46,6 @@ public class XmppUtils {
         sb.append(msg.getType());
         sb.append("\nPROPERTY NAMES: ");
         sb.append(msg.getPropertyNames());
-        LOG.warn(sb.toString());
+        LOG.info(sb.toString());
     }
 }
