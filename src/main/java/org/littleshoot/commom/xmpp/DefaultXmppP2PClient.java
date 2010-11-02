@@ -48,7 +48,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     private final OfferAnswerListener offerAnswerListener;
 
     private XMPPConnection xmppOffererConnection;
-    private XMPPConnection xmppAnswererConnection;
+    //private XMPPConnection xmppAnswererConnection;
     
     /**
      * The executor is used to queue up messages in order. This allows 
@@ -129,6 +129,8 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         
         final ChatManager chatManager = xmppOffererConnection.getChatManager();
         final Message offerMessage = new Message();
+        log.info("Creating offer to: {}", jid);
+        log.info("Sending offer: {}", new String(offer));
         final String base64 = 
             Base64.encodeBase64URLSafeString(offer);
         offerMessage.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE);
@@ -200,11 +202,13 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                 this.xmppOffererConnection = 
                     singleXmppConnection(username, password, id);
                 log.info("Created offerer");
-                this.xmppAnswererConnection = 
-                    singleXmppConnection(username, password, id);
+                //this.xmppAnswererConnection = 
+                //    singleXmppConnection(username, password, id);
                 log.info("Created answerer");
-                addChatManagerListener(this.xmppAnswererConnection);
-                return this.xmppAnswererConnection.getUser();
+                addChatManagerListener(this.xmppOffererConnection);
+                //addChatManagerListener(this.xmppAnswererConnection);
+                return this.xmppOffererConnection.getUser();
+                //return this.xmppAnswererConnection.getUser();
             } catch (final XMPPException e) {
                 final String msg = "Error creating XMPP connection";
                 log.error(msg, e);
