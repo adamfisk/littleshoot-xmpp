@@ -85,12 +85,12 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
 
     public String login(final String username, final String password) 
         throws IOException {
-        return persistentXmppConnections(username, password, "SHOOT-");
+        return persistentXmppConnection(username, password, "SHOOT-");
     }
     
     public String login(final String username, final String password,
         final String id) throws IOException {
-        return persistentXmppConnections(username, password, id);
+        return persistentXmppConnection(username, password, id);
     }
     
     public void register(final long userId) {
@@ -198,26 +198,29 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         }
     }
     
-    private String persistentXmppConnections(final String username, 
+    private String persistentXmppConnection(final String username, 
         final String password, final String id) throws IOException {
         XMPPException exc = null;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 20000; i++) {
             try {
                 log.info("Attempting XMPP connection...");
                 this.xmppOffererConnection = 
                     singleXmppConnection(username, password, id);
                 log.info("Created offerer");
-                //this.xmppAnswererConnection = 
-                //    singleXmppConnection(username, password, id);
                 log.info("Created answerer");
                 addChatManagerListener(this.xmppOffererConnection);
-                //addChatManagerListener(this.xmppAnswererConnection);
                 return this.xmppOffererConnection.getUser();
-                //return this.xmppAnswererConnection.getUser();
             } catch (final XMPPException e) {
                 final String msg = "Error creating XMPP connection";
                 log.error(msg, e);
                 exc = e;
+            }
+            
+            // Gradual backoff.
+            try {
+                Thread.sleep(i * 100);
+            } catch (InterruptedException e) {
+                log.info("Interrupted?", e);
             }
         }
         if (exc != null) {
@@ -403,7 +406,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             public void connectionClosedOnError(final Exception e) {
                 log.info("XMPP connection closed on error", e);
                 try {
-                    persistentXmppConnections(username, password, id);
+                    persistentXmppConnection(username, password, id);
                 } catch (final IOException e1) {
                     log.error("Could not re-establish connection?", e1);
                 }
@@ -412,7 +415,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             public void connectionClosed() {
                 log.info("XMPP connection closed. Creating new connection.");
                 try {
-                    persistentXmppConnections(username, password, id);
+                    persistentXmppConnection(username, password, id);
                 } catch (final IOException e1) {
                     log.error("Could not re-establish connection?", e1);
                 }
