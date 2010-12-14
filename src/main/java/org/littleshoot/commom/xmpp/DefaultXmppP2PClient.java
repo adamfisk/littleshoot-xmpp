@@ -6,6 +6,8 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -57,6 +59,9 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
      */
     private final ExecutorService messageExecutor = 
         Executors.newSingleThreadExecutor();
+    
+    private final Collection<MessageListener> messageListeners =
+        new ArrayList<MessageListener>();
 
     private final int relayWaitTime;
     
@@ -235,6 +240,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                 log.info("Created a chat with: {}", chat.getParticipant());
                 log.info("I am: {}", conn.getUser());
                 log.info("Message listeners: {}", chat.getListeners());
+                log.info("Created locally: " + createdLocally);
                 chat.addMessageListener(new MessageListener() {
                     
                     public void processMessage(final Chat ch, final Message msg) {
@@ -246,8 +252,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                             return;
                         }
 
-                        final int mt = 
-                            (Integer) msg.getProperty(P2PConstants.MESSAGE_TYPE);
+                        final int mt = (Integer) obj;
                         switch (mt) {
                             case P2PConstants.INVITE:
                                 log.error("Processing INVITE");
@@ -259,8 +264,15 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                                 }
                                 break;
                             default:
-                                log.error("Unknown message on aswerer: "+mt);
+                                log.info("Non-standard message on aswerer..." +
+                                    "sending to additional listeners, if any: "+mt);
                                 XmppUtils.printMessage(msg);
+                                
+                                synchronized (messageListeners) {
+                                    for (final MessageListener ml : messageListeners) {
+                                        ml.processMessage(ch, msg);
+                                    }
+                                }
                                 break;
                         }
                     }
@@ -412,5 +424,9 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
 
     public XMPPConnection getXmppConnection() {
         return xmppOffererConnection;
+    }
+
+    public void addMessageListener(final MessageListener ml) {
+        messageListeners.add(ml);
     }
 }
