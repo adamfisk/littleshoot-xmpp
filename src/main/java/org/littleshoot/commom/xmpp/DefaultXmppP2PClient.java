@@ -50,7 +50,6 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     private final OfferAnswerListener offerAnswerListener;
 
     private XMPPConnection xmppOffererConnection;
-    //private XMPPConnection xmppAnswererConnection;
     
     /**
      * The executor is used to queue up messages in order. This allows 
@@ -268,8 +267,8 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                                 break;
                             default:
                                 log.info("Non-standard message on aswerer..." +
-                                    "sending to additional listeners, if any: "+mt);
-                                XmppUtils.printMessage(msg);
+                                    "sending to additional listeners, if any: "+
+                                    mt);
                                 
                                 synchronized (messageListeners) {
                                     for (final MessageListener ml : messageListeners) {
