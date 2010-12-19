@@ -206,7 +206,6 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                 this.xmppOffererConnection = 
                     singleXmppConnection(username, password, id);
                 log.info("Created offerer");
-                log.info("Created answerer");
                 addChatManagerListener(this.xmppOffererConnection);
                 return this.xmppOffererConnection.getUser();
             } catch (final XMPPException e) {
@@ -241,7 +240,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                 final boolean createdLocally) {
                 log.info("Created a chat with: {}", chat.getParticipant());
                 log.info("I am: {}", conn.getUser());
-                log.info("Message listeners: {}", chat.getListeners());
+                log.info("Message listeners on chat: {}", chat.getListeners());
                 log.info("Created locally: " + createdLocally);
                 chat.addMessageListener(new MessageListener() {
                     
@@ -250,7 +249,8 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                         final Object obj = 
                             msg.getProperty(P2PConstants.MESSAGE_TYPE);
                         if (obj == null) {
-                            log.error("No message type!!");
+                            log.info("No message type!! Notifying listeners");
+                            notifyListeners(ch, msg);
                             return;
                         }
 
@@ -270,12 +270,17 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                                     "sending to additional listeners, if any: "+
                                     mt);
                                 
-                                synchronized (messageListeners) {
-                                    for (final MessageListener ml : messageListeners) {
-                                        ml.processMessage(ch, msg);
-                                    }
-                                }
+                                notifyListeners(ch, msg);
                                 break;
+                        }
+                    }
+
+                    private void notifyListeners(final Chat ch, 
+                        final Message msg) {
+                        synchronized (messageListeners) {
+                            for (final MessageListener ml : messageListeners) {
+                                ml.processMessage(ch, msg);
+                            }
                         }
                     }
                 });
