@@ -12,6 +12,10 @@ public class XmppUtils {
     private XmppUtils() {}
 
     public static void printMessage(final Message msg) {
+        LOG.info(toString(msg));
+    }
+
+    public static String toString(final Message msg) {
         final XMPPError error = msg.getError();
         final StringBuilder sb = new StringBuilder();
         sb.append("\nMESSAGE: ");
@@ -46,6 +50,6 @@ public class XmppUtils {
         sb.append(msg.getType());
         sb.append("\nPROPERTY NAMES: ");
         sb.append(msg.getPropertyNames());
-        LOG.info(sb.toString());
+        return sb.toString();
     }
 }

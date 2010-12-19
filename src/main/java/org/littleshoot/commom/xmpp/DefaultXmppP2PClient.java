@@ -75,9 +75,12 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     
     public Socket newSocket(final URI uri) throws IOException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
+        
+        // Note we use a longer timeout time for XMPP since we see more
+        // inconsistent behavior there.
         final TcpUdpSocket tcpUdpSocket = 
             new DefaultTcpUdpSocket(this, this.offerAnswerFactory,
-                this.relayWaitTime);
+                this.relayWaitTime, 40 * 1000);
         
         return tcpUdpSocket.newSocket(uri);
     }
@@ -183,6 +186,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                             break;
                         default:
                             log.error("Did not recognize type: " + type);
+                            log.error(XmppUtils.toString(msg));
                     }
                 }
             });
