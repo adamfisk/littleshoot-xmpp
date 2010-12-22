@@ -265,7 +265,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                         switch (mt) {
                             case P2PConstants.INVITE:
                                 log.error("Processing INVITE");
-                                XmppUtils.printMessage(msg);
+                                //XmppUtils.printMessage(msg);
                                 final String sdp = 
                                     (String) msg.getProperty(P2PConstants.SDP);
                                 if (StringUtils.isNotBlank(sdp)) {
@@ -331,7 +331,6 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         } catch (final XMPPException e) {
             log.error("Could not send error message", e);
         }
-        //this.sipClient.writeInviteOk(invite, ByteBuffer.wrap(answer));
         offerAnswer.processOffer(offer);
 
         log.debug("Done processing XMPP INVITE!!!");
