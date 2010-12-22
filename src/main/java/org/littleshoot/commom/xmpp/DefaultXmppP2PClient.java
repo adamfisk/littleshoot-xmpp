@@ -25,6 +25,7 @@ import org.jivesoftware.smack.MessageListener;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.packet.Message;
+import org.lastbamboo.common.offer.answer.NoAnswerException;
 import org.lastbamboo.common.offer.answer.OfferAnswer;
 import org.lastbamboo.common.offer.answer.OfferAnswerConnectException;
 import org.lastbamboo.common.offer.answer.OfferAnswerFactory;
@@ -73,14 +74,16 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         this.relayWaitTime = relayWaitTime;
     }
     
-    public Socket newSocket(final URI uri) throws IOException {
+    public Socket newSocket(final URI uri) throws IOException, 
+        NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         
-        // Note we use a longer timeout time for XMPP since we see more
-        // inconsistent behavior there.
+        // Note we use a short timeout for waiting for answers. This is 
+        // because we've seen XMPP messages get lost in the ether, and we 
+        // just want to send a few of them quickly when this does happen.
         final TcpUdpSocket tcpUdpSocket = 
             new DefaultTcpUdpSocket(this, this.offerAnswerFactory,
-                this.relayWaitTime, 40 * 1000);
+                this.relayWaitTime, 10 * 1000);
         
         return tcpUdpSocket.newSocket(uri);
     }

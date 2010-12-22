@@ -10,7 +10,9 @@ import java.util.prefs.Preferences;
 import org.apache.commons.httpclient.ConnectTimeoutException;
 import org.apache.commons.httpclient.params.HttpConnectionParams;
 import org.apache.commons.httpclient.protocol.ProtocolSocketFactory;
-import org.lastbamboo.common.util.SocketFactory;
+import org.apache.commons.io.IOExceptionWithCause;
+import org.lastbamboo.common.offer.answer.NoAnswerException;
+import org.lastbamboo.common.p2p.SocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,19 +55,29 @@ public class XmppProtocolSocketFactory implements ProtocolSocketFactory {
         }
         
         final URI uri = this.xmppUriFactory.createXmppUri(host);
-        try {
-            log.trace("About to create socket...");
-            final Socket sock = this.socketFactory.newSocket(uri);
-            log.debug("Got socket!! Returning to HttpClient");
-            
-            // Note there can appear to be an odd delay after this point if
-            // you're just looking at the raw logs, but it's due to HttpClient
-            // actually making the HTTP request and getting a response.
-            return sock;
+        
+        // We try a few times because sometimes XMPP servers seem to randomly
+        // not deliver messages.
+        NoAnswerException nae = null;
+        for (int i = 0; i < 3; i++) {
+            try {
+                log.trace("About to create socket...");
+                final Socket sock = this.socketFactory.newSocket(uri);
+                log.debug("Got socket!! Returning to HttpClient");
+                
+                // Note there can appear to be an odd delay after this point if
+                // you're just looking at the raw logs, but it's due to HttpClient
+                // actually making the HTTP request and getting a response.
+                return sock;
+            } catch (final NoAnswerException e) {
+                log.warn("Did not get answer! Trying again", e);
+                nae = e;
+            }
+            catch (final IOException e) {
+                log.warn("Exception creating P2P socket", e);
+                throw e;
+            }
         }
-        catch (final IOException e) {
-            log.warn("Exception creating SIP socket", e);
-            throw e;
-        }
+        throw nae;
     }
 }
