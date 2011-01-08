@@ -237,8 +237,6 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     }
     
     private void addChatManagerListener(final XMPPConnection conn) {
-
-
         // TODO: Add a roster listener and make sure we're only processing 
         // messages from users on our roster.
         final ChatManager cm = conn.getChatManager();
@@ -247,12 +245,13 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                 final boolean createdLocally) {
                 log.info("Created a chat with: {}", chat.getParticipant());
                 log.info("I am: {}", conn.getUser());
-                log.info("Message listeners on chat: {}", chat.getListeners());
+                //log.info("Message listeners on chat: {}", chat.getListeners());
                 log.info("Created locally: " + createdLocally);
                 chat.addMessageListener(new MessageListener() {
                     
                     public void processMessage(final Chat ch, final Message msg) {
-                        log.info("Got message: {}", msg);
+                        log.info("Got message: {} from "+ch.getParticipant(),
+                            msg);
                         final Object obj = 
                             msg.getProperty(P2PConstants.MESSAGE_TYPE);
                         if (obj == null) {
@@ -264,8 +263,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                         final int mt = (Integer) obj;
                         switch (mt) {
                             case P2PConstants.INVITE:
-                                log.error("Processing INVITE");
-                                //XmppUtils.printMessage(msg);
+                                log.info("Processing INVITE");
                                 final String sdp = 
                                     (String) msg.getProperty(P2PConstants.SDP);
                                 if (StringUtils.isNotBlank(sdp)) {
@@ -284,7 +282,11 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
 
                     private void notifyListeners(final Chat ch, 
                         final Message msg) {
+                        log.info("Notifying global listeners");
                         synchronized (messageListeners) {
+                            if (messageListeners.isEmpty()) {
+                                log.info("No message listeners to forward to");
+                            }
                             for (final MessageListener ml : messageListeners) {
                                 ml.processMessage(ch, msg);
                             }
