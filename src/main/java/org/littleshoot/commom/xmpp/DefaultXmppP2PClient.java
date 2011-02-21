@@ -35,7 +35,7 @@ import org.lastbamboo.common.offer.answer.OfferAnswerTransactionListener;
 import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
 import org.lastbamboo.common.p2p.P2PConstants;
 import org.lastbamboo.common.p2p.TcpUdpSocket;
-import org.lastbamboo.common.util.CommonUtils;
+import org.littleshoot.util.CommonUtils;
 import org.littleshoot.mina.common.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
