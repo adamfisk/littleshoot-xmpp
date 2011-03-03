@@ -35,8 +35,8 @@ import org.lastbamboo.common.offer.answer.OfferAnswerTransactionListener;
 import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
 import org.lastbamboo.common.p2p.P2PConstants;
 import org.lastbamboo.common.p2p.TcpUdpSocket;
-import org.littleshoot.util.CommonUtils;
 import org.littleshoot.mina.common.ByteBuffer;
+import org.littleshoot.util.CommonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,15 +64,50 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         new ArrayList<MessageListener>();
 
     private final int relayWaitTime;
-    
 
+    private final String host;
+
+    private final int port;
+
+    private final String serviceName;
+    
+    public static DefaultXmppP2PClient newGoogleTalkClient(
+        final OfferAnswerFactory factory,
+        final OfferAnswerListener listener, 
+        final int relayWait) {
+        return new DefaultXmppP2PClient(factory, listener, 
+            relayWait, "talk.google.com", 5222, "gmail.com");
+    }
+
+    public static DefaultXmppP2PClient newFacebookChatClient(
+        final OfferAnswerFactory factory,
+        final OfferAnswerListener listener, 
+        final int relayWait) {
+        return new DefaultXmppP2PClient(factory, listener, 
+            relayWait, "chat.facebook.com", 5222, "chat.facebook.com");
+    }
+
+    /*
     public DefaultXmppP2PClient(final OfferAnswerFactory offerAnswerFactory,
         final OfferAnswerListener offerAnswerListener, 
         final int relayWaitTime) {
+        this(offerAnswerFactory, offerAnswerListener, relayWaitTime, 
+            "talk.google.com", 5222, "gmail.com");
+    }
+    */
+    
+    private DefaultXmppP2PClient(final OfferAnswerFactory offerAnswerFactory,
+        final OfferAnswerListener offerAnswerListener, 
+        final int relayWaitTime, final String host, final int port, 
+        final String serviceName) {
         this.offerAnswerFactory = offerAnswerFactory;
         this.offerAnswerListener = offerAnswerListener;
         this.relayWaitTime = relayWaitTime;
+        this.host = host;
+        this.port = port;
+        this.serviceName = serviceName;
     }
+    
     
     public Socket newSocket(final URI uri) throws IOException, 
         NoAnswerException {
@@ -341,10 +376,13 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     private XMPPConnection singleXmppConnection(final String username, 
         final String password, final String id) throws XMPPException {
         final ConnectionConfiguration config = 
-            new ConnectionConfiguration("talk.google.com", 5222, "gmail.com");
+            //new ConnectionConfiguration("talk.google.com", 5222, "gmail.com");
+            new ConnectionConfiguration(this.host, this.port, this.serviceName);
         config.setCompressionEnabled(true);
         config.setRosterLoadedAtLogin(true);
         config.setReconnectionAllowed(false);
+        
+        // TODO: This should probably be an SSLSocketFactory no??
         config.setSocketFactory(new SocketFactory() {
             
             @Override
@@ -444,4 +482,5 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     public void addMessageListener(final MessageListener ml) {
         messageListeners.add(ml);
     }
+
 }
