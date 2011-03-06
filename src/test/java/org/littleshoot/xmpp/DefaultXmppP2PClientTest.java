@@ -1,22 +1,12 @@
 package org.littleshoot.xmpp;
 
-import java.io.IOException;
-import java.net.Socket;
-
 import org.jivesoftware.smack.ConnectionConfiguration;
 import org.jivesoftware.smack.SASLAuthentication;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.provider.ProviderManager;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.lastbamboo.common.offer.answer.OfferAnswer;
-import org.lastbamboo.common.offer.answer.OfferAnswerConnectException;
-import org.lastbamboo.common.offer.answer.OfferAnswerFactory;
-import org.lastbamboo.common.offer.answer.OfferAnswerListener;
-import org.lastbamboo.common.offer.answer.OfferAnswerListenerImpl;
-import org.littleshoot.commom.xmpp.DefaultXmppP2PClient;
 import org.littleshoot.commom.xmpp.SASLFacebookMechanism;
-import org.littleshoot.util.SocketListener;
 
 @Ignore
 public class DefaultXmppP2PClientTest {
