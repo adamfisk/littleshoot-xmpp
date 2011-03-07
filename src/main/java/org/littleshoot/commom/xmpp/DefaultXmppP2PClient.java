@@ -26,6 +26,7 @@ import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.packet.Message;
 import org.lastbamboo.common.offer.answer.AnswererOfferAnswerListener;
+import org.lastbamboo.common.offer.answer.IceMediaStreamDesc;
 import org.lastbamboo.common.offer.answer.NoAnswerException;
 import org.lastbamboo.common.offer.answer.OfferAnswer;
 import org.lastbamboo.common.offer.answer.OfferAnswerConnectException;
@@ -110,8 +111,21 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     }
     
     
-    public Socket newSocket(final URI uri) throws IOException, 
-        NoAnswerException {
+    public Socket newSocket(final URI uri) 
+        throws IOException, NoAnswerException {
+        log.trace ("Creating XMPP socket for URI: {}", uri);
+        return newSocket(uri, IceMediaStreamDesc.newReliable());
+    }
+    
+    public Socket newUnreliableSocket(final URI uri) 
+        throws IOException, NoAnswerException {
+        log.trace ("Creating XMPP socket for URI: {}", uri);
+        return newSocket(uri, IceMediaStreamDesc.newUnreliableUdpStream());
+    }
+    
+    private Socket newSocket(final URI uri, 
+        final IceMediaStreamDesc streamDesc) 
+        throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         
         // Note we use a short timeout for waiting for answers. This is 
@@ -119,7 +133,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         // just want to send a few of them quickly when this does happen.
         final TcpUdpSocket tcpUdpSocket = 
             new DefaultTcpUdpSocket(this, this.offerAnswerFactory,
-                this.relayWaitTime, 10 * 1000);
+                this.relayWaitTime, 10 * 1000, streamDesc);
         
         return tcpUdpSocket.newSocket(uri);
     }
