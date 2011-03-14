@@ -31,7 +31,6 @@ import org.lastbamboo.common.offer.answer.NoAnswerException;
 import org.lastbamboo.common.offer.answer.OfferAnswer;
 import org.lastbamboo.common.offer.answer.OfferAnswerConnectException;
 import org.lastbamboo.common.offer.answer.OfferAnswerFactory;
-import org.lastbamboo.common.offer.answer.OfferAnswerListener;
 import org.lastbamboo.common.offer.answer.OfferAnswerMessage;
 import org.lastbamboo.common.offer.answer.OfferAnswerTransactionListener;
 import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
@@ -109,7 +108,6 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         this.port = port;
         this.serviceName = serviceName;
     }
-    
     
     public Socket newSocket(final URI uri) 
         throws IOException, NoAnswerException {
