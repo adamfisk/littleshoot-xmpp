@@ -51,7 +51,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     
     private final OfferAnswerFactory offerAnswerFactory;
 
-    private XMPPConnection xmppOffererConnection;
+    private XMPPConnection xmppConnection;
     
     /**
      * The executor is used to queue up messages in order. This allows 
@@ -87,15 +87,6 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         return new DefaultXmppP2PClient(factory, socketListener, 
             relayWait, "chat.facebook.com", 5222, "chat.facebook.com");
     }
-
-    /*
-    public DefaultXmppP2PClient(final OfferAnswerFactory offerAnswerFactory,
-        final OfferAnswerListener offerAnswerListener, 
-        final int relayWaitTime) {
-        this(offerAnswerFactory, offerAnswerListener, relayWaitTime, 
-            "talk.google.com", 5222, "gmail.com");
-    }
-    */
     
     private DefaultXmppP2PClient(final OfferAnswerFactory offerAnswerFactory,
         final SessionSocketListener socketListener,
@@ -185,7 +176,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         // We need to convert the URI to a XMPP/Jabber JID.
         final String jid = uri.toASCIIString();
         
-        final ChatManager chatManager = xmppOffererConnection.getChatManager();
+        final ChatManager chatManager = xmppConnection.getChatManager();
         final Message offerMessage = new Message();
         log.info("Creating offer to: {}", jid);
         log.info("Sending offer: {}", new String(offer));
@@ -193,7 +184,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             Base64.encodeBase64URLSafeString(offer);
         offerMessage.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE);
         offerMessage.setProperty(P2PConstants.SDP, base64);
-        log.info("Creating chat from: {}", xmppOffererConnection.getUser());
+        log.info("Creating chat from: {}", xmppConnection.getUser());
         final Chat chat = chatManager.createChat(jid, 
             new MessageListener() {
                 public void processMessage(final Chat ch, final Message msg) {
@@ -258,11 +249,11 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         for (int i = 0; i < 20000; i++) {
             try {
                 log.info("Attempting XMPP connection...");
-                this.xmppOffererConnection = 
+                this.xmppConnection = 
                     singleXmppConnection(username, password, id);
                 log.info("Created offerer");
-                addChatManagerListener(this.xmppOffererConnection);
-                return this.xmppOffererConnection.getUser();
+                addChatManagerListener(this.xmppConnection);
+                return this.xmppConnection.getUser();
             } catch (final XMPPException e) {
                 final String msg = "Error creating XMPP connection";
                 log.error(msg, e);
@@ -443,12 +434,14 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         final XMPPConnection conn = new XMPPConnection(config);
         conn.connect();
         
+        log.info("Connection is Secure: {}", conn.isSecureConnection());
+        log.info("Connection is TLS: {}", conn.isUsingTLS());
         conn.login(username, password, id);
         
         while (!conn.isAuthenticated()) {
             log.info("Waiting for authentication");
             try {
-                Thread.sleep(1000);
+                Thread.sleep(400);
             } catch (final InterruptedException e1) {
                 log.error("Exception during sleep?", e1);
             }
@@ -491,7 +484,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     }
 
     public XMPPConnection getXmppConnection() {
-        return xmppOffererConnection;
+        return xmppConnection;
     }
 
     public void addMessageListener(final MessageListener ml) {
