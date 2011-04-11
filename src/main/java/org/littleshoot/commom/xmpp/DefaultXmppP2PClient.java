@@ -39,6 +39,7 @@ import org.lastbamboo.common.p2p.TcpUdpSocket;
 import org.littleshoot.mina.common.ByteBuffer;
 import org.littleshoot.util.CommonUtils;
 import org.littleshoot.util.SessionSocketListener;
+import org.littleshoot.util.mina.MinaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,27 +74,34 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     private final String serviceName;
 
     private final SessionSocketListener socketListener;
+
+    private final SessionSocketListener callSocketListener;
     
     public static DefaultXmppP2PClient newGoogleTalkClient(
         final OfferAnswerFactory factory,
-        final SessionSocketListener socketListener, final int relayWait) {
+        final SessionSocketListener socketListener, 
+        final SessionSocketListener callSocketListener,final int relayWait) {
         return new DefaultXmppP2PClient(factory, socketListener, 
-            relayWait, "talk.google.com", 5222, "gmail.com");
+            callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com");
     }
 
     public static DefaultXmppP2PClient newFacebookChatClient(
         final OfferAnswerFactory factory,
-        final SessionSocketListener socketListener, final int relayWait) {
+        final SessionSocketListener socketListener, 
+        final SessionSocketListener callSocketListener, final int relayWait) {
         return new DefaultXmppP2PClient(factory, socketListener, 
-            relayWait, "chat.facebook.com", 5222, "chat.facebook.com");
+            callSocketListener, relayWait, "chat.facebook.com", 5222, 
+            "chat.facebook.com");
     }
     
     private DefaultXmppP2PClient(final OfferAnswerFactory offerAnswerFactory,
         final SessionSocketListener socketListener,
+        final SessionSocketListener callSocketListener,
         final int relayWaitTime, final String host, final int port, 
         final String serviceName) {
         this.offerAnswerFactory = offerAnswerFactory;
         this.socketListener = socketListener;
+        this.callSocketListener = callSocketListener;
         this.relayWaitTime = relayWaitTime;
         this.host = host;
         this.port = port;
@@ -338,12 +346,14 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     
     private void processSdp(final Chat chat, final byte[] body) {
         final ByteBuffer offer = ByteBuffer.wrap(body);
+        final String offerString = MinaUtils.toAsciiString(offer);
         final OfferAnswer offerAnswer;
         try {
             //offerAnswer = this.offerAnswerFactory.createAnswerer(
             //   this.answererOfferAnswerListener);
             offerAnswer = this.offerAnswerFactory.createAnswerer(
-                new AnswererOfferAnswerListener(chat.getParticipant(), socketListener));
+                new AnswererOfferAnswerListener(chat.getParticipant(), 
+                    socketListener, callSocketListener, offerString));
         }
         catch (final OfferAnswerConnectException e) {
             // This indicates we could not establish the necessary connections 
