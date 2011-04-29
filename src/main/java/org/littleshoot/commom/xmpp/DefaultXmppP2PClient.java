@@ -14,8 +14,6 @@ import java.util.concurrent.Executors;
 import javax.net.SocketFactory;
 
 import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.lang.ArrayUtils;
-import org.apache.commons.lang.StringUtils;
 import org.jivesoftware.smack.Chat;
 import org.jivesoftware.smack.ChatManager;
 import org.jivesoftware.smack.ChatManagerListener;
@@ -73,18 +71,19 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
 
     private final String serviceName;
 
-    private final SessionSocketListener socketListener;
-
     private final SessionSocketListener callSocketListener;
+
+    private final SessionSocketListener sessionListener;
     
     public static DefaultXmppP2PClient newGoogleTalkClient(
         final OfferAnswerFactory factory,
-        final SessionSocketListener socketListener, 
+        final SessionSocketListener sessionListener, 
         final SessionSocketListener callSocketListener,final int relayWait) {
-        return new DefaultXmppP2PClient(factory, socketListener, 
+        return new DefaultXmppP2PClient(factory, sessionListener, 
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com");
     }
 
+    /*
     public static DefaultXmppP2PClient newFacebookChatClient(
         final OfferAnswerFactory factory,
         final SessionSocketListener socketListener, 
@@ -93,14 +92,15 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             callSocketListener, relayWait, "chat.facebook.com", 5222, 
             "chat.facebook.com");
     }
+    */
     
     private DefaultXmppP2PClient(final OfferAnswerFactory offerAnswerFactory,
-        final SessionSocketListener socketListener,
+        final SessionSocketListener sessionListener,
         final SessionSocketListener callSocketListener,
         final int relayWaitTime, final String host, final int port, 
         final String serviceName) {
         this.offerAnswerFactory = offerAnswerFactory;
-        this.socketListener = socketListener;
+        this.sessionListener = sessionListener;
         this.callSocketListener = callSocketListener;
         this.relayWaitTime = relayWaitTime;
         this.host = host;
@@ -145,21 +145,6 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         return persistentXmppConnection(username, password, id);
     }
     
-    public void register(final long userId) {
-        log.error("User name and pwd required");
-        throw new UnsupportedOperationException("User name and pwd required");
-    }
-
-    public void register(final URI sipUri) {
-        log.error("User name and pwd required");
-        throw new UnsupportedOperationException("User name and pwd required");
-    }
-
-    public void register(final String id) {
-        log.error("User name and pwd required");
-        throw new UnsupportedOperationException("User name and pwd required");
-    }
-    
     public void offer(final URI uri, final byte[] offer,
         final OfferAnswerTransactionListener transactionListener) 
         throws IOException {
@@ -188,35 +173,32 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         final Message offerMessage = new Message();
         log.info("Creating offer to: {}", jid);
         log.info("Sending offer: {}", new String(offer));
-        final String base64 = 
+        final String base64Sdp = 
             Base64.encodeBase64URLSafeString(offer);
         offerMessage.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE);
-        offerMessage.setProperty(P2PConstants.SDP, base64);
+        offerMessage.setProperty(P2PConstants.SDP, base64Sdp);
+        offerMessage.setProperty(P2PConstants.SECRET_KEY, 
+            CommonUtils.generateBase64Key());
         log.info("Creating chat from: {}", xmppConnection.getUser());
         final Chat chat = chatManager.createChat(jid, 
             new MessageListener() {
                 public void processMessage(final Chat ch, final Message msg) {
                     log.info("Got answer on offerer: {}", msg);
 
-                    final String base64Body = 
-                        (String) msg.getProperty(P2PConstants.SDP);
-                    final byte[] body;
-                    if (StringUtils.isBlank(base64Body)) {
-                        log.error("No SDP!!");
-                        body = ArrayUtils.EMPTY_BYTE_ARRAY;
-                    }
-                    else {
-                        body = Base64.decodeBase64(base64Body);
-                    }
+                    final byte[] body = CommonUtils.decodeBase64(
+                        (String) msg.getProperty(P2PConstants.SDP));
+                    final byte[] key = CommonUtils.decodeBase64(
+                        (String) msg.getProperty(P2PConstants.SECRET_KEY));
                     final OfferAnswerMessage oam = 
                         new OfferAnswerMessage() {
-                            
                             public String getTransactionKey() {
                                 return String.valueOf(hashCode());
                             }
-                            
                             public ByteBuffer getBody() {
                                 return ByteBuffer.wrap(body);
+                            }
+                            public byte[] getKey() {
+                                return key;
                             }
                         };
                         
@@ -265,7 +247,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             } catch (final XMPPException e) {
                 final String msg = "Error creating XMPP connection";
                 log.error(msg, e);
-                exc = e;
+                exc = e;    
             }
             
             // Gradual backoff.
@@ -311,11 +293,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                         switch (mt) {
                             case P2PConstants.INVITE:
                                 log.info("Processing INVITE");
-                                final String sdp = 
-                                    (String) msg.getProperty(P2PConstants.SDP);
-                                if (StringUtils.isNotBlank(sdp)) {
-                                    processSdp(ch, Base64.decodeBase64(sdp));
-                                }
+                                processSdp(ch, msg);
                                 break;
                             default:
                                 log.info("Non-standard message on aswerer..." +
@@ -344,27 +322,29 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         });
     }
     
-    private void processSdp(final Chat chat, final byte[] body) {
-        final ByteBuffer offer = ByteBuffer.wrap(body);
+    private void processSdp(final Chat chat, final Message msg) {
+        final String sdp = 
+            (String) msg.getProperty(P2PConstants.SDP);
+        final ByteBuffer offer = ByteBuffer.wrap(Base64.decodeBase64(sdp));
         final String offerString = MinaUtils.toAsciiString(offer);
+        
+        final byte[] answerKey = CommonUtils.generateKey();
         final OfferAnswer offerAnswer;
         try {
-            //offerAnswer = this.offerAnswerFactory.createAnswerer(
-            //   this.answererOfferAnswerListener);
             offerAnswer = this.offerAnswerFactory.createAnswerer(
                 new AnswererOfferAnswerListener(chat.getParticipant(), 
-                    socketListener, callSocketListener, offerString));
+                    sessionListener, callSocketListener, offerString));
         }
         catch (final OfferAnswerConnectException e) {
             // This indicates we could not establish the necessary connections 
             // for generating our candidates.
-            log.warn("We could not create candidates for offer: " +
-                CommonUtils.toString(body), e);
-            final Message msg = new Message();
-            msg.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_ERROR);
-            msg.setTo(chat.getParticipant());
+            log.warn("We could not create candidates for offer: " + sdp, e);
+            final Message error = new Message();
+            error.setProperty(P2PConstants.MESSAGE_TYPE, 
+                P2PConstants.INVITE_ERROR);
+            error.setTo(chat.getParticipant());
             try {
-                chat.sendMessage(msg);
+                chat.sendMessage(error);
             } catch (final XMPPException e1) {
                 log.error("Could not send error message", e1);
             }
@@ -373,19 +353,21 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             return;
         }
         final byte[] answer = offerAnswer.generateAnswer();
-        final Message msg = new Message();
-        msg.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_OK);
-        msg.setProperty(P2PConstants.SDP, Base64.encodeBase64String(answer));
-        msg.setTo(chat.getParticipant());
-        log.info("Sending INVITE OK to {}", msg.getTo());
+        final Message inviteOk = new Message();
+        inviteOk.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_OK);
+        inviteOk.setProperty(P2PConstants.SDP, 
+            Base64.encodeBase64String(answer));
+        inviteOk.setProperty(P2PConstants.SECRET_KEY, 
+            Base64.encodeBase64String(answerKey));
+        inviteOk.setTo(chat.getParticipant());
+        log.info("Sending INVITE OK to {}", inviteOk.getTo());
         try {
-            chat.sendMessage(msg);
+            chat.sendMessage(inviteOk);
             log.info("Sent INVITE OK");
         } catch (final XMPPException e) {
             log.error("Could not send error message", e);
         }
         offerAnswer.processOffer(offer);
-
         log.debug("Done processing XMPP INVITE!!!");
     }
 
