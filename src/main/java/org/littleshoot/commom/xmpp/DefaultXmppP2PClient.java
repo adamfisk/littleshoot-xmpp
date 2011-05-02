@@ -33,9 +33,10 @@ import org.lastbamboo.common.offer.answer.OfferAnswerMessage;
 import org.lastbamboo.common.offer.answer.OfferAnswerTransactionListener;
 import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
 import org.lastbamboo.common.p2p.P2PConstants;
-import org.lastbamboo.common.p2p.TcpUdpSocket;
 import org.littleshoot.mina.common.ByteBuffer;
+import org.littleshoot.util.CipherSocket;
 import org.littleshoot.util.CommonUtils;
+import org.littleshoot.util.KeyStorage;
 import org.littleshoot.util.SessionSocketListener;
 import org.littleshoot.util.mina.MinaUtils;
 import org.slf4j.Logger;
@@ -73,13 +74,15 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
 
     private final SessionSocketListener callSocketListener;
 
-    private final SessionSocketListener sessionListener;
+    private final InetSocketAddress plainTextRelayAddress;
+
+    //private final SessionSocketListener sessionListener;
     
     public static DefaultXmppP2PClient newGoogleTalkClient(
         final OfferAnswerFactory factory,
-        final SessionSocketListener sessionListener, 
+        final InetSocketAddress plainTextRelayAddress, 
         final SessionSocketListener callSocketListener,final int relayWait) {
-        return new DefaultXmppP2PClient(factory, sessionListener, 
+        return new DefaultXmppP2PClient(factory, plainTextRelayAddress, 
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com");
     }
 
@@ -95,12 +98,12 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     */
     
     private DefaultXmppP2PClient(final OfferAnswerFactory offerAnswerFactory,
-        final SessionSocketListener sessionListener,
+        final InetSocketAddress plainTextRelayAddress,
         final SessionSocketListener callSocketListener,
         final int relayWaitTime, final String host, final int port, 
         final String serviceName) {
         this.offerAnswerFactory = offerAnswerFactory;
-        this.sessionListener = sessionListener;
+        this.plainTextRelayAddress = plainTextRelayAddress;
         this.callSocketListener = callSocketListener;
         this.relayWaitTime = relayWaitTime;
         this.host = host;
@@ -128,11 +131,12 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         // Note we use a short timeout for waiting for answers. This is 
         // because we've seen XMPP messages get lost in the ether, and we 
         // just want to send a few of them quickly when this does happen.
-        final TcpUdpSocket tcpUdpSocket = 
+        final DefaultTcpUdpSocket tcpUdpSocket = 
             new DefaultTcpUdpSocket(this, this.offerAnswerFactory,
                 this.relayWaitTime, 10 * 1000, streamDesc);
         
-        return tcpUdpSocket.newSocket(uri);
+        final Socket sock = tcpUdpSocket.newSocket(uri);
+        return new CipherSocket(sock, tcpUdpSocket.getWriteKey(), tcpUdpSocket.getReadKey());
     }
 
     public String login(final String username, final String password) 
@@ -146,13 +150,14 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     }
     
     public void offer(final URI uri, final byte[] offer,
-        final OfferAnswerTransactionListener transactionListener) 
+        final OfferAnswerTransactionListener transactionListener, 
+        final KeyStorage keyStorage) 
         throws IOException {
         
         final Runnable runner = new Runnable() {
             public void run() {
                 try {
-                    xmppOffer(uri, offer, transactionListener);
+                    xmppOffer(uri, offer, transactionListener, keyStorage);
                 }
                 catch (final Throwable t) {
                     log.error("Unexpected throwable", t);
@@ -164,8 +169,8 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     }
     
     private void xmppOffer(final URI uri, final byte[] offer,
-        final OfferAnswerTransactionListener transactionListener) 
-        throws IOException {
+        final OfferAnswerTransactionListener transactionListener, 
+        final KeyStorage keyStorage) throws IOException {
         // We need to convert the URI to a XMPP/Jabber JID.
         final String jid = uri.toASCIIString();
         
@@ -178,7 +183,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         offerMessage.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE);
         offerMessage.setProperty(P2PConstants.SDP, base64Sdp);
         offerMessage.setProperty(P2PConstants.SECRET_KEY, 
-            CommonUtils.generateBase64Key());
+            Base64.encodeBase64String(keyStorage.getWriteKey()));
         log.info("Creating chat from: {}", xmppConnection.getUser());
         final Chat chat = chatManager.createChat(jid, 
             new MessageListener() {
@@ -189,6 +194,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                         (String) msg.getProperty(P2PConstants.SDP));
                     final byte[] key = CommonUtils.decodeBase64(
                         (String) msg.getProperty(P2PConstants.SECRET_KEY));
+                    keyStorage.setReadKey(key);
                     final OfferAnswerMessage oam = 
                         new OfferAnswerMessage() {
                             public String getTransactionKey() {
@@ -196,9 +202,6 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                             }
                             public ByteBuffer getBody() {
                                 return ByteBuffer.wrap(body);
-                            }
-                            public byte[] getKey() {
-                                return key;
                             }
                         };
                         
@@ -293,7 +296,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                         switch (mt) {
                             case P2PConstants.INVITE:
                                 log.info("Processing INVITE");
-                                processSdp(ch, msg);
+                                processInvite(ch, msg);
                                 break;
                             default:
                                 log.info("Non-standard message on aswerer..." +
@@ -322,9 +325,11 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         });
     }
     
-    private void processSdp(final Chat chat, final Message msg) {
-        final String sdp = 
-            (String) msg.getProperty(P2PConstants.SDP);
+    private void processInvite(final Chat chat, final Message msg) {
+        final String readString = 
+            (String) msg.getProperty(P2PConstants.SECRET_KEY);
+        final byte[] readKey = Base64.decodeBase64(readString);
+        final String sdp = (String) msg.getProperty(P2PConstants.SDP);
         final ByteBuffer offer = ByteBuffer.wrap(Base64.decodeBase64(sdp));
         final String offerString = MinaUtils.toAsciiString(offer);
         
@@ -333,7 +338,8 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         try {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
                 new AnswererOfferAnswerListener(chat.getParticipant(), 
-                    sessionListener, callSocketListener, offerString));
+                    this.plainTextRelayAddress, callSocketListener, 
+                    offerString, answerKey, readKey));
         }
         catch (final OfferAnswerConnectException e) {
             // This indicates we could not establish the necessary connections 
