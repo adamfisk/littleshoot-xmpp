@@ -75,6 +75,9 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     private final SessionSocketListener callSocketListener;
 
     private final InetSocketAddress plainTextRelayAddress;
+    
+    private final ExecutorService messageProcessingExecutor = 
+        Executors.newCachedThreadPool();
 
     //private final SessionSocketListener sessionListener;
     
@@ -191,40 +194,8 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             new MessageListener() {
                 public void processMessage(final Chat ch, final Message msg) {
                     log.info("Got answer on offerer: {}", msg);
-
-                    final byte[] body = CommonUtils.decodeBase64(
-                        (String) msg.getProperty(P2PConstants.SDP));
-                    final byte[] key = CommonUtils.decodeBase64(
-                        (String) msg.getProperty(P2PConstants.SECRET_KEY));
-                    keyStorage.setReadKey(key);
-                    final OfferAnswerMessage oam = 
-                        new OfferAnswerMessage() {
-                            public String getTransactionKey() {
-                                return String.valueOf(hashCode());
-                            }
-                            public ByteBuffer getBody() {
-                                return ByteBuffer.wrap(body);
-                            }
-                        };
-                        
-                    final Object obj = 
-                        msg.getProperty(P2PConstants.MESSAGE_TYPE);
-                    if (obj == null) {
-                        log.error("No message type!!");
-                        return;
-                    }
-                    final int type = (Integer) obj;
-                    switch (type) {
-                        case P2PConstants.INVITE_OK:
-                            transactionListener.onTransactionSucceeded(oam);
-                            break;
-                        case P2PConstants.INVITE_ERROR:
-                            transactionListener.onTransactionFailed(oam);
-                            break;
-                        default:
-                            log.error("Did not recognize type: " + type);
-                            log.error(XmppUtils.toString(msg));
-                    }
+                    messageProcessingExecutor.execute(new XmppInviteOkRunner(msg, 
+                        transactionListener, keyStorage));
                 }
             });
         
@@ -282,43 +253,8 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                 chat.addMessageListener(new MessageListener() {
                     
                     public void processMessage(final Chat ch, final Message msg) {
-                        log.info("Got message: {} from "+ch.getParticipant(),
-                            msg);
-                        final Object obj = 
-                            msg.getProperty(P2PConstants.MESSAGE_TYPE);
-                        if (obj == null) {
-                            log.info("No message type!! Notifying listeners");
-                            notifyListeners(ch, msg);
-                            return;
-                        }
-
-                        final int mt = (Integer) obj;
-                        switch (mt) {
-                            case P2PConstants.INVITE:
-                                log.info("Processing INVITE");
-                                processInvite(ch, msg);
-                                break;
-                            default:
-                                log.info("Non-standard message on aswerer..." +
-                                    "sending to additional listeners, if any: "+
-                                    mt);
-                                
-                                notifyListeners(ch, msg);
-                                break;
-                        }
-                    }
-
-                    private void notifyListeners(final Chat ch, 
-                        final Message msg) {
-                        log.info("Notifying global listeners");
-                        synchronized (messageListeners) {
-                            if (messageListeners.isEmpty()) {
-                                log.info("No message listeners to forward to");
-                            }
-                            for (final MessageListener ml : messageListeners) {
-                                ml.processMessage(ch, msg);
-                            }
-                        }
+                        messageProcessingExecutor.execute(
+                            new XmppInviteRunner(ch, msg));
                     }
                 });
             }
@@ -487,6 +423,114 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
 
     public void addMessageListener(final MessageListener ml) {
         messageListeners.add(ml);
+    }
+    
+
+    /**
+     * Runnable for off-loading INVITE OK processing to a thread pool.
+     */
+    private final class XmppInviteOkRunner implements Runnable {
+
+        private final Message msg;
+        private final OfferAnswerTransactionListener transactionListener;
+        private final KeyStorage keyStorage;
+
+        private XmppInviteOkRunner(final Message msg, 
+            final OfferAnswerTransactionListener transactionListener, 
+            final KeyStorage keyStorage) {
+            this.msg = msg;
+            this.transactionListener = transactionListener;
+            this.keyStorage = keyStorage;
+            
+        }
+        
+        public void run() {
+            final byte[] body = CommonUtils.decodeBase64(
+                (String) msg.getProperty(P2PConstants.SDP));
+            final byte[] key = CommonUtils.decodeBase64(
+                (String) msg.getProperty(P2PConstants.SECRET_KEY));
+            keyStorage.setReadKey(key);
+            final OfferAnswerMessage oam = 
+                new OfferAnswerMessage() {
+                    public String getTransactionKey() {
+                        return String.valueOf(hashCode());
+                    }
+                    public ByteBuffer getBody() {
+                        return ByteBuffer.wrap(body);
+                    }
+                };
+                
+            final Object obj = 
+                msg.getProperty(P2PConstants.MESSAGE_TYPE);
+            if (obj == null) {
+                log.error("No message type!!");
+                return;
+            }
+            final int type = (Integer) obj;
+            switch (type) {
+                case P2PConstants.INVITE_OK:
+                    transactionListener.onTransactionSucceeded(oam);
+                    break;
+                case P2PConstants.INVITE_ERROR:
+                    transactionListener.onTransactionFailed(oam);
+                    break;
+                default:
+                    log.error("Did not recognize type: " + type);
+                    log.error(XmppUtils.toString(msg));
+            }
+        }
+    }
+    
+    /**
+     * Runnable for off-loading INVITE processing to a thread pool.
+     */
+    private final class XmppInviteRunner implements Runnable {
+
+        private final Chat chat;
+        private final Message msg;
+
+        private XmppInviteRunner(final Chat chat, final Message msg) {
+            this.chat = chat;
+            this.msg = msg;
+            
+        }
+        
+        public void run() {
+            log.info("Got message: {} from "+chat.getParticipant(), msg);
+            final Object obj = 
+                msg.getProperty(P2PConstants.MESSAGE_TYPE);
+            if (obj == null) {
+                log.info("No message type!! Notifying listeners");
+                notifyListeners();
+                return;
+            }
+
+            final int mt = (Integer) obj;
+            switch (mt) {
+                case P2PConstants.INVITE:
+                    log.info("Processing INVITE");
+                    processInvite(chat, msg);
+                    break;
+                default:
+                    log.info("Non-standard message on aswerer..." +
+                        "sending to additional listeners, if any: "+ mt);
+                    
+                    notifyListeners();
+                    break;
+            }
+        }
+
+        private void notifyListeners() {
+            log.info("Notifying global listeners");
+            synchronized (messageListeners) {
+                if (messageListeners.isEmpty()) {
+                    log.info("No message listeners to forward to");
+                }
+                for (final MessageListener ml : messageListeners) {
+                    ml.processMessage(chat, msg);
+                }
+            }
+        }
     }
 
 }
