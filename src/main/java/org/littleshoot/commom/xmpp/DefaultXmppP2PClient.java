@@ -136,7 +136,9 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                 this.relayWaitTime, 10 * 1000, streamDesc);
         
         final Socket sock = tcpUdpSocket.newSocket(uri);
-        return new CipherSocket(sock, tcpUdpSocket.getWriteKey(), tcpUdpSocket.getReadKey());
+        log.info("Creating new CipherSocket");
+        return new CipherSocket(sock, tcpUdpSocket.getWriteKey(), 
+            tcpUdpSocket.getReadKey());
     }
 
     public String login(final String username, final String password) 
@@ -269,8 +271,6 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     }
     
     private void addChatManagerListener(final XMPPConnection conn) {
-        // TODO: Add a roster listener and make sure we're only processing 
-        // messages from users on our roster.
         final ChatManager cm = conn.getChatManager();
         cm.addChatListener(new ChatManagerListener() {
             public void chatCreated(final Chat chat, 

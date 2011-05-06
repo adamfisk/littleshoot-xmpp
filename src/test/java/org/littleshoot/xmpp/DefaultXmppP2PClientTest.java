@@ -21,7 +21,7 @@ public class DefaultXmppP2PClientTest {
     
     public void testLogin() throws Exception {
         
-        
+        /*
         ProviderManager.getInstance().addIQProvider("vCard", "vcard-temp",
                 new org.jivesoftware.smackx.provider.VCardProvider());
             // register Facebook SASL mechanism
@@ -44,6 +44,7 @@ public class DefaultXmppP2PClientTest {
             conn.login("a@bravenewsoftware.org@chat.facebook.com", "1745t77q");
             
             Thread.sleep(30000);
+            */
             
             /*
         final ConnectionConfiguration config = 

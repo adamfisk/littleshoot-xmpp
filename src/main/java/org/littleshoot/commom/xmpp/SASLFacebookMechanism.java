@@ -123,8 +123,8 @@ public class SASLFacebookMechanism extends SASLMechanism {
         }
         String authenticationText = response == null? "" : 
             Base64.encodeBytes(response, Base64.DONT_BREAK_LINES);
-        getSASLAuthentication().send(authenticationText);
-        //getSASLAuthentication().send(new Response(authenticationText));
+        //getSASLAuthentication().send(authenticationText);
+        getSASLAuthentication().send(new Response(authenticationText));
     }
 
     private Map<String, String> getQueryMap(String query) {
