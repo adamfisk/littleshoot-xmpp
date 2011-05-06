@@ -1,6 +1,7 @@
 package org.littleshoot.commom.xmpp;
 
 import org.jivesoftware.smack.packet.Message;
+import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smack.packet.XMPPError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,22 +12,26 @@ public class XmppUtils {
     
     private XmppUtils() {}
 
-    public static void printMessage(final Message msg) {
+    public static void printMessage(final Packet msg) {
         LOG.info(toString(msg));
     }
 
-    public static String toString(final Message msg) {
+    public static String toString(final Packet msg) {
         final XMPPError error = msg.getError();
         final StringBuilder sb = new StringBuilder();
         sb.append("\nMESSAGE: ");
         sb.append("\nBODY: ");
-        sb.append(msg.getBody());
+        if (msg instanceof Message) {
+            sb.append(((Message)msg).getBody());
+        }
         sb.append("\nFROM: ");
         sb.append(msg.getFrom());
         sb.append("\nTO: ");
         sb.append(msg.getTo());
         sb.append("\nSUBJECT: ");
-        sb.append(msg.getSubject());
+        if (msg instanceof Message) {
+            sb.append(((Message)msg).getSubject());
+        }
         sb.append("\nPACKET ID: ");
         sb.append(msg.getPacketID());
         
@@ -47,7 +52,9 @@ public class XmppUtils {
         sb.append("\nEXTENSIONS: ");
         sb.append(msg.getExtensions());
         sb.append("\nTYPE: ");
-        sb.append(msg.getType());
+        if (msg instanceof Message) {
+            sb.append(((Message)msg).getType());
+        }
         sb.append("\nPROPERTY NAMES: ");
         sb.append(msg.getPropertyNames());
         return sb.toString();
