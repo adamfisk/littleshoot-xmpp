@@ -102,7 +102,15 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         private void readInvites(final Socket sock) throws IOException, 
             SAXException {
             final InputStream is = sock.getInputStream();
-            final Document doc = XmlUtils.toDoc(is);
+            while (true) {
+                final Document doc = XmlUtils.toDoc(is);
+                
+                final String invite = XmlUtils.toString(doc);
+                log.info("Got an invite: {}", invite);
+                
+                // We now need to process the invite just as if we had received
+                // it over XMPP.
+            }
         }
     }
 
@@ -263,7 +271,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 this.relayWaitTime, 30 * 1000, streamDesc);
         
         final Socket sock = tcpUdpSocket.newSocket(uri);
-        log.info("Creating new CipherSocket");
+        log.info("Created control socket!!");
         //return new CipherSocket(sock, tcpUdpSocket.getWriteKey(), 
         //    tcpUdpSocket.getReadKey());
         return sock;
@@ -335,8 +343,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         offerMessage.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE);
         offerMessage.setProperty(P2PConstants.SDP, base64Sdp);
         offerMessage.setProperty(P2PConstants.CONTROL, "true");
-        offerMessage.setProperty(P2PConstants.SECRET_KEY, 
-            Base64.encodeBase64String(keyStorage.getWriteKey()));
+        if (keyStorage != null) {
+            offerMessage.setProperty(P2PConstants.SECRET_KEY, 
+                    Base64.encodeBase64String(keyStorage.getWriteKey()));
+        }
         return offerMessage;
     }
 
@@ -400,7 +410,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final ByteBuffer offer = ByteBuffer.wrap(Base64.decodeBase64(sdp));
         final String offerString = MinaUtils.toAsciiString(offer);
         
-        final byte[] answerKey = CommonUtils.generateKey();
         final OfferAnswer offerAnswer;
         try {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
@@ -427,12 +436,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             return;
         }
         final byte[] answer = offerAnswer.generateAnswer();
-        final Message inviteOk = new Message();
-        inviteOk.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_OK);
-        inviteOk.setProperty(P2PConstants.SDP, 
-            Base64.encodeBase64String(answer));
-        inviteOk.setProperty(P2PConstants.SECRET_KEY, 
-            Base64.encodeBase64String(answerKey));
+        final Message inviteOk = newInviteOk(answer);
         inviteOk.setTo(chat.getParticipant());
         log.info("Sending INVITE OK to {}", inviteOk.getTo());
         try {
@@ -445,6 +449,16 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         log.debug("Done processing XMPP INVITE!!!");
     }
     
+    private Message newInviteOk(final byte[] answer) {
+        final Message inviteOk = new Message();
+        inviteOk.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_OK);
+        inviteOk.setProperty(P2PConstants.SDP, 
+            Base64.encodeBase64String(answer));
+        inviteOk.setProperty(P2PConstants.SECRET_KEY, 
+            Base64.encodeBase64String(CommonUtils.generateKey()));
+        return inviteOk;
+    }
+
     /*
     private void processInvite(final Chat chat, final Message msg) {
         final String readString = 
@@ -480,13 +494,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             return;
         }
         final byte[] answer = offerAnswer.generateAnswer();
-        final Message inviteOk = new Message();
-        inviteOk.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_OK);
-        inviteOk.setProperty(P2PConstants.SDP, 
-            Base64.encodeBase64String(answer));
-        inviteOk.setProperty(P2PConstants.SECRET_KEY, 
-            Base64.encodeBase64String(answerKey));
-        inviteOk.setTo(chat.getParticipant());
+        final Message inviteOk = newInviteOk(answer);
         log.info("Sending INVITE OK to {}", inviteOk.getTo());
         try {
             chat.sendMessage(inviteOk);
