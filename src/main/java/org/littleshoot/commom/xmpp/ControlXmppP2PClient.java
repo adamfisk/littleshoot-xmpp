@@ -721,6 +721,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 // This will parse the full XML/XMPP message and extract the 
                 // SDP from it.
                 final Document doc = XmlUtils.toDoc(is);
+                log.info("Got XML INVITE: {}", XmlUtils.toString(doc));
                 final String sdp = XmppUtils.extractSdp(doc);
                 final String key = XmppUtils.extractKey(doc);
                 final ByteBuffer offer = 
