@@ -3,6 +3,7 @@ package org.littleshoot.commom.xmpp;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -16,8 +17,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import javax.net.SocketFactory;
+import javax.xml.xpath.XPathExpressionException;
 
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.io.IOUtils;
 import org.jivesoftware.smack.Chat;
 import org.jivesoftware.smack.ChatManager;
 import org.jivesoftware.smack.ChatManagerListener;
@@ -27,6 +30,7 @@ import org.jivesoftware.smack.MessageListener;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.packet.Message;
+import org.lastbamboo.common.offer.answer.AnswererOfferAnswerListener;
 import org.lastbamboo.common.offer.answer.IceMediaStreamDesc;
 import org.lastbamboo.common.offer.answer.NoAnswerException;
 import org.lastbamboo.common.offer.answer.OfferAnswer;
@@ -55,66 +59,10 @@ import org.xml.sax.SAXException;
  */
 public class ControlXmppP2PClient implements XmppP2PClient {
 
-    private static final class ControlSocketOfferAnswerListener 
-        implements OfferAnswerListener {
-
-        private final Logger log = LoggerFactory.getLogger(getClass());
-        
-        private static final Map<String, Socket> incomingControlSockets = 
-            new ConcurrentHashMap<String, Socket>();
-        
-        private final String fullJid;
-
-        public ControlSocketOfferAnswerListener(final String fullJid) {
-            log.info("Creating listener on answerwer with full JID: {}", 
-                fullJid);
-            this.fullJid = fullJid;
-        }
-
-        public void onOfferAnswerFailed(final OfferAnswer offerAnswer) {
-            log.warn("Offer answer failed!! {}", offerAnswer);
-        }
-
-        public void onTcpSocket(final Socket sock) {
-            onSocket(sock);
-        }
-
-        public void onUdpSocket(final Socket sock) {
-            onSocket(sock);
-        }
-
-        private void onSocket(final Socket sock) {
-            // We use one control socket for sending offers and another one
-            // for receiving offers. This is an incoming socket for 
-            // receiving offers.
-            incomingControlSockets.put(this.fullJid, sock);
-            try {
-                readInvites(sock);
-            } catch (IOException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            } catch (SAXException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-        }
-
-        private void readInvites(final Socket sock) throws IOException, 
-            SAXException {
-            final InputStream is = sock.getInputStream();
-            while (true) {
-                final Document doc = XmlUtils.toDoc(is);
-                
-                final String invite = XmlUtils.toString(doc);
-                log.info("Got an invite: {}", invite);
-                
-                // We now need to process the invite just as if we had received
-                // it over XMPP.
-            }
-        }
-    }
-
     private final Logger log = LoggerFactory.getLogger(getClass());
+    
+    private static final Map<String, Socket> incomingControlSockets = 
+        new ConcurrentHashMap<String, Socket>();
     
     private final OfferAnswerFactory offerAnswerFactory;
 
@@ -149,8 +97,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private final Map<URI, Socket> outgoingControlSockets = 
         new ConcurrentHashMap<URI, Socket>();
     
-    //private final SessionSocketListener sessionListener;
-    
     public static ControlXmppP2PClient newGoogleTalkClient(
         final OfferAnswerFactory factory,
         final InetSocketAddress plainTextRelayAddress, 
@@ -169,7 +115,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             "chat.facebook.com");
     }
     */
-    
+
     private ControlXmppP2PClient(final OfferAnswerFactory offerAnswerFactory,
         final InetSocketAddress plainTextRelayAddress,
         final SessionSocketListener callSocketListener,
@@ -236,7 +182,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             this.control = control;
         }
 
-        public void offer(final URI uri, byte[] offer,
+        public void offer(final URI uri, final byte[] offer,
             final OfferAnswerTransactionListener transactionListener,
             final KeyStorage keyStore) throws IOException {
             synchronized (this.control) {
@@ -255,13 +201,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     final String received = XmlUtils.toString(doc);
                     log.info("Got XML answer: {}", received);
                 } catch (final SAXException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
+                    log.warn("Could not parse INVITE OK", e);
+                    // Close the socket?
+                    IOUtils.closeQuietly(this.control);
                 }
-
             }
         }
-        
     }
 
     private Socket establishControlSocket(final URI uri, 
@@ -686,7 +631,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         private XmppInviteRunner(final Chat chat, final Message msg) {
             this.chat = chat;
             this.msg = msg;
-            
         }
         
         public void run() {
@@ -728,4 +672,109 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
     }
 
+    private final class ControlSocketOfferAnswerListener 
+        implements OfferAnswerListener {
+    
+        private final String fullJid;
+    
+        public ControlSocketOfferAnswerListener(final String fullJid) {
+            log.info("Creating listener on answerwer with full JID: {}", 
+                fullJid);
+            this.fullJid = fullJid;
+        }
+    
+        public void onOfferAnswerFailed(final OfferAnswer offerAnswer) {
+            log.warn("Offer answer failed!! {}", offerAnswer);
+        }
+    
+        public void onTcpSocket(final Socket sock) {
+            onSocket(sock);
+        }
+    
+        public void onUdpSocket(final Socket sock) {
+            onSocket(sock);
+        }
+    
+        private void onSocket(final Socket sock) {
+            // We use one control socket for sending offers and another one
+            // for receiving offers. This is an incoming socket for 
+            // receiving offers.
+            incomingControlSockets.put(this.fullJid, sock);
+            try {
+                readInvites(sock);
+            } catch (IOException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            } catch (SAXException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            } catch (XPathExpressionException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+        }
+    
+        private void readInvites(final Socket sock) throws IOException, 
+            SAXException, XPathExpressionException {
+            final InputStream is = sock.getInputStream();
+            while (true) {
+                // This will parse the full XML/XMPP message and extract the 
+                // SDP from it.
+                final Document doc = XmlUtils.toDoc(is);
+                final String sdp = XmppUtils.extractSdp(doc);
+                final String key = XmppUtils.extractKey(doc);
+                final ByteBuffer offer = 
+                    ByteBuffer.wrap(Base64.decodeBase64(sdp));
+                processOffer(offer, sock, key);
+            }
+        }
+    }
+    
+
+    private void processOffer(final ByteBuffer offer, final Socket sock, 
+        final String readKey) throws IOException {
+        final String offerString = MinaUtils.toAsciiString(offer);
+        
+        final byte[] answerKey = CommonUtils.generateKey();
+        final OfferAnswer offerAnswer;
+        try {
+            offerAnswer = this.offerAnswerFactory.createAnswerer(
+                new AnswererOfferAnswerListener("", 
+                    this.plainTextRelayAddress, callSocketListener, 
+                    offerString, answerKey, readKey.getBytes("UTF-8")));
+        }
+        catch (final OfferAnswerConnectException e) {
+            // This indicates we could not establish the necessary connections 
+            // for generating our candidates.
+            log.warn("We could not create candidates for offer", e);
+            error(sock);
+            return;
+        } catch (final UnsupportedEncodingException e) {
+            error(sock);
+            return;
+        }
+        final byte[] answer = offerAnswer.generateAnswer();
+        final Message inviteOk = newInviteOk(answer);
+        writeMessage(inviteOk, sock);
+    }
+    
+   private void error(final Socket sock) {
+        final Message error = new Message();
+        error.setProperty(P2PConstants.MESSAGE_TYPE, 
+            P2PConstants.INVITE_ERROR);
+        try {
+            writeMessage(error, sock);
+        } catch (final IOException e) {
+            log.warn("Could not write message", e);
+        }
+    }
+
+    private void writeMessage(final Message msg, final Socket sock) 
+        throws IOException {
+        log.info("Sending reply to {}", msg.getTo());
+        final String msgString = msg.toXML();
+        final OutputStream os = sock.getOutputStream();
+        os.write(msgString.getBytes("UTF-8"));
+        os.flush();
+    }
 }
