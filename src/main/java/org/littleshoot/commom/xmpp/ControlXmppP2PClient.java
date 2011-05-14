@@ -712,8 +712,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             error(sock);
             return;
         }
+        log.info("Creating answer");
         final byte[] answer = offerAnswer.generateAnswer();
+        log.info("Creating INVITE OK");
         final Message inviteOk = newInviteOk(answer);
+        log.info("Writing INVITE OK");
         writeMessage(inviteOk, sock);
         log.info("Wrote INVITE OK");
     }
