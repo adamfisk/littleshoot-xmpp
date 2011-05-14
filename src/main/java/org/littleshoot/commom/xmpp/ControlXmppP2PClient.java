@@ -650,21 +650,19 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
     
         private void onSocket(final Socket sock) {
+            log.info("Got control socket on 'server' side");
             // We use one control socket for sending offers and another one
             // for receiving offers. This is an incoming socket for 
             // receiving offers.
             incomingControlSockets.put(this.fullJid, sock);
             try {
                 readInvites(sock);
-            } catch (IOException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            } catch (SAXException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            } catch (XPathExpressionException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
+            } catch (final IOException e) {
+                log.info("Exception reading invites", e);
+            } catch (final SAXException e) {
+                log.info("Exception reading invites", e);
+            } catch (final XPathExpressionException e) {
+                log.info("Exception reading invites", e);
             }
         }
     
