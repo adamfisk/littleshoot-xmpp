@@ -174,41 +174,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             tcpUdpSocket.getReadKey());
     }
     
-    private final class ControlSocketOfferer implements Offerer {
-
-        private final Socket control;
-
-        public ControlSocketOfferer(final Socket control) {
-            this.control = control;
-        }
-
-        public void offer(final URI uri, final byte[] offer,
-            final OfferAnswerTransactionListener transactionListener,
-            final KeyStorage keyStore) throws IOException {
-            synchronized (this.control) {
-                final Message msg = newOffer(offer, null);
-                final String xml = msg.toXML();
-                log.info("Writing XML offer on control socket: {}", xml);
-                
-                // We just block on a single offer and answer.
-                final OutputStream os = this.control.getOutputStream();
-                os.write(xml.getBytes("UTF-8"));
-                os.flush();
-                
-                final InputStream is = this.control.getInputStream();
-                try {
-                    final Document doc = XmlUtils.toDoc(is);
-                    final String received = XmlUtils.toString(doc);
-                    log.info("Got XML answer: {}", received);
-                } catch (final SAXException e) {
-                    log.warn("Could not parse INVITE OK", e);
-                    // Close the socket?
-                    IOUtils.closeQuietly(this.control);
-                }
-            }
-        }
-    }
-
     private Socket establishControlSocket(final URI uri, 
         final IceMediaStreamDesc streamDesc) throws IOException {
         final DefaultTcpUdpSocket tcpUdpSocket = 
@@ -350,10 +315,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private void processControlInvite(final Chat chat, final Message msg) {
         final String readString = 
             (String) msg.getProperty(P2PConstants.SECRET_KEY);
-        final byte[] readKey = Base64.decodeBase64(readString);
+        //final byte[] readKey = Base64.decodeBase64(readString);
         final String sdp = (String) msg.getProperty(P2PConstants.SDP);
         final ByteBuffer offer = ByteBuffer.wrap(Base64.decodeBase64(sdp));
-        final String offerString = MinaUtils.toAsciiString(offer);
+        //final String offerString = MinaUtils.toAsciiString(offer);
         
         final OfferAnswer offerAnswer;
         try {
@@ -403,54 +368,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             Base64.encodeBase64String(CommonUtils.generateKey()));
         return inviteOk;
     }
-
-    /*
-    private void processInvite(final Chat chat, final Message msg) {
-        final String readString = 
-            (String) msg.getProperty(P2PConstants.SECRET_KEY);
-        final byte[] readKey = Base64.decodeBase64(readString);
-        final String sdp = (String) msg.getProperty(P2PConstants.SDP);
-        final ByteBuffer offer = ByteBuffer.wrap(Base64.decodeBase64(sdp));
-        final String offerString = MinaUtils.toAsciiString(offer);
-        
-        final byte[] answerKey = CommonUtils.generateKey();
-        final OfferAnswer offerAnswer;
-        try {
-            offerAnswer = this.offerAnswerFactory.createAnswerer(
-                new AnswererOfferAnswerListener(chat.getParticipant(), 
-                    this.plainTextRelayAddress, callSocketListener, 
-                    offerString, answerKey, readKey));
-        }
-        catch (final OfferAnswerConnectException e) {
-            // This indicates we could not establish the necessary connections 
-            // for generating our candidates.
-            log.warn("We could not create candidates for offer: " + sdp, e);
-            final Message error = new Message();
-            error.setProperty(P2PConstants.MESSAGE_TYPE, 
-                P2PConstants.INVITE_ERROR);
-            error.setTo(chat.getParticipant());
-            try {
-                chat.sendMessage(error);
-            } catch (final XMPPException e1) {
-                log.error("Could not send error message", e1);
-            }
-            //this.m_sipClient.writeInviteRejected(invite, 488, 
-            //"Not Acceptable Here");
-            return;
-        }
-        final byte[] answer = offerAnswer.generateAnswer();
-        final Message inviteOk = newInviteOk(answer);
-        log.info("Sending INVITE OK to {}", inviteOk.getTo());
-        try {
-            chat.sendMessage(inviteOk);
-            log.info("Sent INVITE OK");
-        } catch (final XMPPException e) {
-            log.error("Could not send error message", e);
-        }
-        offerAnswer.processOffer(offer);
-        log.debug("Done processing XMPP INVITE!!!");
-    }
-    */
 
     private XMPPConnection singleXmppConnection(final String username, 
         final String password, final String id) throws XMPPException {
@@ -653,7 +570,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 default:
                     log.info("Non-standard message on aswerer..." +
                         "sending to additional listeners, if any: "+ mt);
-                    
                     notifyListeners();
                     break;
             }
@@ -667,6 +583,44 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 }
                 for (final MessageListener ml : messageListeners) {
                     ml.processMessage(chat, msg);
+                }
+            }
+        }
+    }
+    
+    private class ControlSocketOfferer implements Offerer {
+
+        private final Socket control;
+
+        private ControlSocketOfferer(final Socket control) {
+            this.control = control;
+        }
+
+        public void offer(final URI uri, final byte[] offer,
+            final OfferAnswerTransactionListener transactionListener,
+            final KeyStorage keyStore) throws IOException {
+            synchronized (this.control) {
+                final Message msg = newOffer(offer, null);
+                final String xml = msg.toXML();
+                log.info("Writing XML offer on control socket: {}", xml);
+                
+                // We just block on a single offer and answer.
+                final OutputStream os = this.control.getOutputStream();
+                os.write(xml.getBytes("UTF-8"));
+                os.flush();
+                
+                final InputStream is = this.control.getInputStream();
+                try {
+                    final Document doc = XmlUtils.toDoc(is);
+                    final String received = XmlUtils.toString(doc);
+                    log.info("Got XML answer: {}", received);
+                    
+                    // We need to extract the SDP to establish the new socket.
+                    
+                } catch (final SAXException e) {
+                    log.warn("Could not parse INVITE OK", e);
+                    // Close the socket?
+                    IOUtils.closeQuietly(this.control);
                 }
             }
         }
@@ -757,6 +711,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final byte[] answer = offerAnswer.generateAnswer();
         final Message inviteOk = newInviteOk(answer);
         writeMessage(inviteOk, sock);
+        log.info("Wrote INVITE OK");
     }
     
    private void error(final Socket sock) {
