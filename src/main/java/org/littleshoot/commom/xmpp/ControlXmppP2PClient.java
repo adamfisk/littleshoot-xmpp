@@ -673,6 +673,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         private void readInvites(final Socket sock) throws IOException, 
             SAXException, XPathExpressionException {
             final InputStream is = sock.getInputStream();
+            log.info("Reading invites on input stream: {}", is);
             while (true) {
                 // This will parse the full XML/XMPP message and extract the 
                 // SDP from it.
