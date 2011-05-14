@@ -170,8 +170,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         
         final Socket sock = tcpUdpSocket.newSocket(uri);
         log.info("Creating new CipherSocket");
-        return new CipherSocket(sock, tcpUdpSocket.getWriteKey(), 
-            tcpUdpSocket.getReadKey());
+        return sock;
+        //return new CipherSocket(sock, tcpUdpSocket.getWriteKey(), 
+        //    tcpUdpSocket.getReadKey());
     }
     
     private Socket establishControlSocket(final URI uri, 
@@ -205,7 +206,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final Runnable runner = new Runnable() {
             public void run() {
                 try {
-                    xmppOffer(uri, offer, transactionListener, keyStorage);
+                    xmppControlSocketOffer(uri, offer, transactionListener, 
+                        keyStorage);
                 }
                 catch (final Throwable t) {
                     log.error("Unexpected throwable", t);
@@ -216,7 +218,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         this.messageExecutor.execute(runner);
     }
     
-    private void xmppOffer(final URI uri, final byte[] offer,
+    private void xmppControlSocketOffer(final URI uri, final byte[] offer,
         final OfferAnswerTransactionListener transactionListener, 
         final KeyStorage keyStorage) throws IOException {
         // We need to convert the URI to a XMPP/Jabber JID.
@@ -609,8 +611,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 os.write(xml.getBytes("UTF-8"));
                 os.flush();
                 
+                log.info("Wrote message on control socket...");
                 final InputStream is = this.control.getInputStream();
                 try {
+                    log.info("Reading incoming answer on control socket");
                     final Document doc = XmlUtils.toDoc(is);
                     final String received = XmlUtils.toString(doc);
                     log.info("Got XML answer: {}", received);
