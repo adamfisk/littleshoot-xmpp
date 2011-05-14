@@ -734,9 +734,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private void writeMessage(final Message msg, final Socket sock) 
         throws IOException {
-        log.info("Sending reply to {}", msg.getTo());
+        log.info("Sending message through socket: {}", sock);
         final String msgString = msg.toXML();
+        log.info("Writing XMPP message: {}", msgString);
         final OutputStream os = sock.getOutputStream();
+        log.info("Writing message to output stream: {}", os);
         os.write(msgString.getBytes("UTF-8"));
         os.flush();
     }
