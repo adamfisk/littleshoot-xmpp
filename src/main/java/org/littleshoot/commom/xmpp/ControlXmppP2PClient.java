@@ -348,15 +348,15 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final byte[] answer = offerAnswer.generateAnswer();
         final Message inviteOk = newInviteOk(answer);
         inviteOk.setTo(chat.getParticipant());
-        log.info("Sending INVITE OK to {}", inviteOk.getTo());
+        log.info("Sending CONTROL INVITE OK to {}", inviteOk.getTo());
         try {
             chat.sendMessage(inviteOk);
-            log.info("Sent INVITE OK");
+            log.info("Sent CONTROL INVITE OK");
         } catch (final XMPPException e) {
             log.error("Could not send error message", e);
         }
         offerAnswer.processOffer(offer);
-        log.debug("Done processing XMPP INVITE!!!");
+        log.debug("Done processing CONTROL XMPP INVITE!!!");
     }
     
     private Message newInviteOk(final byte[] answer) {
