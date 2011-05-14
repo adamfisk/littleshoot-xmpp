@@ -3,7 +3,6 @@ package org.littleshoot.commom.xmpp;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -21,6 +20,7 @@ import javax.xml.xpath.XPathExpressionException;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.StringUtils;
 import org.jivesoftware.smack.Chat;
 import org.jivesoftware.smack.ChatManager;
 import org.jivesoftware.smack.ChatManagerListener;
@@ -688,23 +688,27 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private void processOffer(final ByteBuffer offer, final Socket sock, 
         final String readKey) throws IOException {
+        log.info("Processing offer...");
         final String offerString = MinaUtils.toAsciiString(offer);
         
         final byte[] answerKey = CommonUtils.generateKey();
         final OfferAnswer offerAnswer;
+        final byte[] key;
+        if (StringUtils.isBlank(readKey)) {
+            key = null;
+        } else {
+            key = readKey.getBytes("UTF-8");
+        }
         try {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
                 new AnswererOfferAnswerListener("", 
                     this.plainTextRelayAddress, callSocketListener, 
-                    offerString, answerKey, readKey.getBytes("UTF-8")));
+                    offerString, answerKey, key));
         }
         catch (final OfferAnswerConnectException e) {
             // This indicates we could not establish the necessary connections 
             // for generating our candidates.
             log.warn("We could not create candidates for offer", e);
-            error(sock);
-            return;
-        } catch (final UnsupportedEncodingException e) {
             error(sock);
             return;
         }

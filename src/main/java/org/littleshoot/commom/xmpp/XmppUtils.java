@@ -30,10 +30,11 @@ public class XmppUtils {
 
     private static String extractXmppProperty(final Document doc, 
         final String name) throws XPathExpressionException {
-        final String invite = XmlUtils.toString(doc);
-        LOG.info("Got an invite: {}", invite);
+        final String xml = XmlUtils.toString(doc);
+        LOG.info("Got an XMPP message: {}", xml);
         final XPathUtils xpath = XPathUtils.newXPath(doc);
-        return xpath.getString("/message/properties/property[name='"+name+"']/value");
+        return xpath.getString(
+            "/message/properties/property[name='"+name+"']/value");
     }
 
     public static void printMessage(final Packet msg) {
