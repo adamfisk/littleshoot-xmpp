@@ -611,7 +611,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 os.write(xml.getBytes("UTF-8"));
                 os.flush();
                 
-                log.info("Wrote message on control socket...");
+                log.info("Wrote message on control socket stream: {}", os);
                 final InputStream is = this.control.getInputStream();
                 try {
                     log.info("Reading incoming answer on control socket");
