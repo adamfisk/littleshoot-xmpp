@@ -16,7 +16,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import javax.net.SocketFactory;
-import javax.xml.xpath.XPathExpressionException;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
@@ -43,7 +42,6 @@ import org.lastbamboo.common.offer.answer.Offerer;
 import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
 import org.lastbamboo.common.p2p.P2PConstants;
 import org.littleshoot.mina.common.ByteBuffer;
-import org.littleshoot.util.CipherSocket;
 import org.littleshoot.util.CommonUtils;
 import org.littleshoot.util.KeyStorage;
 import org.littleshoot.util.SessionSocketListener;
@@ -565,7 +563,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             final int mt = (Integer) obj;
             switch (mt) {
                 case P2PConstants.INVITE:
-                    log.info("Processing INVITE");
+                    log.info("Processing CONTROL INVITE");
                     //processInvite(chat, msg);
                     processControlInvite(chat, msg);
                     break;
@@ -666,15 +664,13 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 log.info("Exception reading invites", e);
             } catch (final SAXException e) {
                 log.info("Exception reading invites", e);
-            } catch (final XPathExpressionException e) {
-                log.info("Exception reading invites", e);
             }
         }
     
         private void readInvites(final Socket sock) throws IOException, 
-            SAXException, XPathExpressionException {
+            SAXException {
             final InputStream is = sock.getInputStream();
-            log.info("Reading invites on input stream: {}", is);
+            log.info("Reading answerer invites on input stream: {}", is);
             while (true) {
                 // This will parse the full XML/XMPP message and extract the 
                 // SDP from it.
