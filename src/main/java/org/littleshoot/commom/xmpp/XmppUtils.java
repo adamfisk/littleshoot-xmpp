@@ -18,23 +18,26 @@ public class XmppUtils {
     
     private XmppUtils() {}
 
-    public static String extractSdp(final Document doc) 
-        throws XPathExpressionException {
+    public static String extractSdp(final Document doc) {
         return extractXmppProperty(doc, P2PConstants.SDP);
     }
 
-    public static String extractKey(final Document doc)
-            throws XPathExpressionException {
+    public static String extractKey(final Document doc) {
         return extractXmppProperty(doc, P2PConstants.SECRET_KEY);
     }
 
     private static String extractXmppProperty(final Document doc, 
-        final String name) throws XPathExpressionException {
+        final String name) {
         final String xml = XmlUtils.toString(doc);
         LOG.info("Got an XMPP message: {}", xml);
         final XPathUtils xpath = XPathUtils.newXPath(doc);
-        return xpath.getString(
-            "/message/properties/property[name='"+name+"']/value");
+        final String str = 
+            "/message/properties/property[name='"+name+"']/value";
+        try {
+            return xpath.getString(str);
+        } catch (final XPathExpressionException e) {
+            throw new Error("Tested XPath no longer working: "+str, e);
+        }
     }
 
     public static void printMessage(final Packet msg) {

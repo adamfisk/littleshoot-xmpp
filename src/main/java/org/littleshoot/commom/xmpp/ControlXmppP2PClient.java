@@ -620,6 +620,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     log.info("Got XML answer: {}", received);
                     
                     // We need to extract the SDP to establish the new socket.
+                    final String sdp = XmppUtils.extractSdp(doc);
                     
                 } catch (final SAXException e) {
                     log.warn("Could not parse INVITE OK", e);
