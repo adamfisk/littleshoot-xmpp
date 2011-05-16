@@ -615,7 +615,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 final InputStream is = this.control.getInputStream();
                 try {
                     log.info("Reading incoming answer on control socket");
-                    final Document doc = XmlUtils.toDoc(is);
+                    final Document doc = XmlUtils.toDoc(is, "</message>");
                     final String received = XmlUtils.toString(doc);
                     log.info("Got XML answer: {}", received);
                     
@@ -677,7 +677,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             while (true) {
                 // This will parse the full XML/XMPP message and extract the 
                 // SDP from it.
-                final Document doc = XmlUtils.toDoc(is);
+                final Document doc = XmlUtils.toDoc(is, "</message>");
                 log.info("Got XML INVITE: {}", XmlUtils.toString(doc));
                 final String sdp = XmppUtils.extractSdp(doc);
                 final String key = XmppUtils.extractKey(doc);
