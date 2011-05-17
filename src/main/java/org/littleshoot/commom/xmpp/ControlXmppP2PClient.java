@@ -603,7 +603,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 this.control.getLocalSocketAddress());
             synchronized (this.control) {
                 final Message msg = newOffer(offer, null);
-                final String xml = msg.toXML() + "\n";
+                final String xml = toXml(msg);
                 log.info("Writing XML offer on control socket: {}", xml);
                 
                 // We just block on a single offer and answer.
@@ -739,11 +739,15 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private void writeMessage(final Message msg, final Socket sock) 
         throws IOException {
         log.info("Sending message through socket: {}", sock);
-        final String msgString = msg.toXML();
+        final String msgString = toXml(msg);
         log.info("Writing XMPP message: {}", msgString);
         final OutputStream os = sock.getOutputStream();
         log.info("Writing message to output stream: {}", os);
         os.write(msgString.getBytes("UTF-8"));
         os.flush();
+    }
+
+    private String toXml(final Message msg) {
+        return msg.toXML() + "\n";
     }
 }
