@@ -599,6 +599,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         public void offer(final URI uri, final byte[] offer,
             final OfferAnswerTransactionListener transactionListener,
             final KeyStorage keyStore) throws IOException {
+            log.info("Sending message from local address: {}", 
+                this.control.getLocalSocketAddress());
             synchronized (this.control) {
                 final Message msg = newOffer(offer, null);
                 final String xml = msg.toXML();
@@ -670,6 +672,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         private void readInvites(final Socket sock) throws IOException, 
             SAXException {
             final InputStream is = sock.getInputStream();
+            log.info("Reading streams from remote address: {}", 
+                 sock.getRemoteSocketAddress());
             log.info("Reading answerer invites on input stream: {}", is);
             while (true) {
                 // This will parse the full XML/XMPP message and extract the 
