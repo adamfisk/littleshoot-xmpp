@@ -164,7 +164,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final DefaultTcpUdpSocket tcpUdpSocket = 
             new DefaultTcpUdpSocket(new ControlSocketOfferer(control), 
                 this.offerAnswerFactory,
-                this.relayWaitTime, 10 * 1000, streamDesc);
+                this.relayWaitTime, 20 * 1000, streamDesc);
         
         final Socket sock = tcpUdpSocket.newSocket(uri);
         log.info("Creating new CipherSocket");
@@ -621,7 +621,20 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     
                     // We need to extract the SDP to establish the new socket.
                     final String sdp = XmppUtils.extractSdp(doc);
+                    final byte[] sdpBytes = Base64.decodeBase64(sdp); 
                     
+                    final OfferAnswerMessage message = 
+                        new OfferAnswerMessage() {
+                            public String getTransactionKey() {
+                                return String.valueOf(hashCode());
+                            }
+                            public ByteBuffer getBody() {
+                                return ByteBuffer.wrap(sdpBytes);
+                            }
+                        };
+                        
+                    log.info("Calling transaction listener: {}", transactionListener);
+                    transactionListener.onTransactionSucceeded(message);
                 } catch (final SAXException e) {
                     log.warn("Could not parse INVITE OK", e);
                     // Close the socket?
@@ -707,7 +720,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
                 new AnswererOfferAnswerListener("", 
                     this.plainTextRelayAddress, callSocketListener, 
-                    offerString, answerKey, key));
+                    offerString, null, null));
         }
         catch (final OfferAnswerConnectException e) {
             // This indicates we could not establish the necessary connections 
