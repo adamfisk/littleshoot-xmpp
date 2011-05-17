@@ -603,7 +603,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 this.control.getLocalSocketAddress());
             synchronized (this.control) {
                 final Message msg = newOffer(offer, null);
-                final String xml = msg.toXML();
+                final String xml = msg.toXML() + "\n";
                 log.info("Writing XML offer on control socket: {}", xml);
                 
                 // We just block on a single offer and answer.
