@@ -66,14 +66,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private XMPPConnection xmppConnection;
     
-    /**
-     * The executor is used to queue up messages in order. This allows 
-     * different threads to send messages without worrying about them getting
-     * mangled or out of order.
-     */
-    private final ExecutorService messageExecutor = 
-        Executors.newSingleThreadExecutor();
-    
     private final Collection<MessageListener> messageListeners =
         new ArrayList<MessageListener>();
 
@@ -152,9 +144,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         // themselves.
         synchronized (this.outgoingControlSockets) {
             if (!this.outgoingControlSockets.containsKey(uri)) {
+                log.info("Creating new control socket");
                 control = establishControlSocket(uri, streamDesc);
                 this.outgoingControlSockets.put(uri, control);
             } else {
+                log.info("Using existing control socket");
                 control = this.outgoingControlSockets.get(uri);
             }
         }
@@ -166,6 +160,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 this.offerAnswerFactory,
                 this.relayWaitTime, 20 * 1000, streamDesc);
         
+        log.info("Trying to create new socket");
         final Socket sock = tcpUdpSocket.newSocket(uri);
         log.info("Creating new CipherSocket");
         return sock;
@@ -200,25 +195,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final OfferAnswerTransactionListener transactionListener, 
         final KeyStorage keyStorage) 
         throws IOException {
-        
-        final Runnable runner = new Runnable() {
-            public void run() {
-                try {
-                    xmppControlSocketOffer(uri, offer, transactionListener, 
-                        keyStorage);
-                }
-                catch (final Throwable t) {
-                    log.error("Unexpected throwable", t);
-                }
-            }
-        };
-        
-        this.messageExecutor.execute(runner);
-    }
-    
-    private void xmppControlSocketOffer(final URI uri, final byte[] offer,
-        final OfferAnswerTransactionListener transactionListener, 
-        final KeyStorage keyStorage) throws IOException {
+
         // We need to convert the URI to a XMPP/Jabber JID.
         final String jid = uri.toASCIIString();
         
@@ -602,6 +579,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             log.info("Sending message from local address: {}", 
                 this.control.getLocalSocketAddress());
             synchronized (this.control) {
+                log.info("Got lock on control socket");
                 final Message msg = newOffer(offer, null);
                 final String xml = toXml(msg);
                 log.info("Writing XML offer on control socket: {}", xml);
@@ -633,7 +611,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                             }
                         };
                         
-                    log.info("Calling transaction listener: {}", transactionListener);
+                    log.info("Calling transaction listener: {}", 
+                        transactionListener);
                     transactionListener.onTransactionSucceeded(message);
                 } catch (final SAXException e) {
                     log.warn("Could not parse INVITE OK", e);
@@ -656,7 +635,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
     
         public void onOfferAnswerFailed(final OfferAnswer offerAnswer) {
-            log.warn("Offer answer failed!! {}", offerAnswer);
+            // The following will often happen for one of TCP or UDP.
+            log.info("TCP or UDP offer answer failed: {}", offerAnswer);
         }
     
         public void onTcpSocket(final Socket sock) {

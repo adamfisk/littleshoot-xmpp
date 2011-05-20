@@ -10,7 +10,6 @@ import java.util.prefs.Preferences;
 import org.apache.commons.httpclient.ConnectTimeoutException;
 import org.apache.commons.httpclient.params.HttpConnectionParams;
 import org.apache.commons.httpclient.protocol.ProtocolSocketFactory;
-import org.apache.commons.io.IOExceptionWithCause;
 import org.lastbamboo.common.offer.answer.NoAnswerException;
 import org.lastbamboo.common.p2p.SocketFactory;
 import org.slf4j.Logger;
