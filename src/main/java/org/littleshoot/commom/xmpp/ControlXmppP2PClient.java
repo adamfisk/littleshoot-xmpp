@@ -92,17 +92,19 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     public static ControlXmppP2PClient newGoogleTalkDirectClient(
         final OfferAnswerFactory factory,
         final InetSocketAddress plainTextRelayAddress, 
-        final SessionSocketListener callSocketListener) {
+        final SessionSocketListener callSocketListener, final int relayWait) {
         return new ControlXmppP2PClient(factory, plainTextRelayAddress, 
-            callSocketListener, 0, "talk.google.com", 5222, "gmail.com", false);
+            callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", 
+            false);
     }
 
     public static ControlXmppP2PClient newGoogleTalkClient(
         final OfferAnswerFactory factory,
         final InetSocketAddress plainTextRelayAddress, 
-        final SessionSocketListener callSocketListener,final int relayWait) {
+        final SessionSocketListener callSocketListener, final int relayWait) {
         return new ControlXmppP2PClient(factory, plainTextRelayAddress, 
-            callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", true);
+            callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", 
+            true);
     }
 
     /*
