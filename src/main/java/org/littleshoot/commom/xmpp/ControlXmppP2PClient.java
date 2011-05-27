@@ -86,13 +86,23 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     
     private final Map<URI, Socket> outgoingControlSockets = 
         new ConcurrentHashMap<URI, Socket>();
+
+    private final boolean useRelay;
     
+    public static ControlXmppP2PClient newGoogleTalkDirectClient(
+        final OfferAnswerFactory factory,
+        final InetSocketAddress plainTextRelayAddress, 
+        final SessionSocketListener callSocketListener) {
+        return new ControlXmppP2PClient(factory, plainTextRelayAddress, 
+            callSocketListener, 0, "talk.google.com", 5222, "gmail.com", false);
+    }
+
     public static ControlXmppP2PClient newGoogleTalkClient(
         final OfferAnswerFactory factory,
         final InetSocketAddress plainTextRelayAddress, 
         final SessionSocketListener callSocketListener,final int relayWait) {
         return new ControlXmppP2PClient(factory, plainTextRelayAddress, 
-            callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com");
+            callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", true);
     }
 
     /*
@@ -110,7 +120,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final InetSocketAddress plainTextRelayAddress,
         final SessionSocketListener callSocketListener,
         final int relayWaitTime, final String host, final int port, 
-        final String serviceName) {
+        final String serviceName,
+        final boolean useRelay) {
         this.offerAnswerFactory = offerAnswerFactory;
         this.plainTextRelayAddress = plainTextRelayAddress;
         this.callSocketListener = callSocketListener;
@@ -118,18 +129,25 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         this.host = host;
         this.port = port;
         this.serviceName = serviceName;
+        this.useRelay = useRelay;
     }
     
     public Socket newSocket(final URI uri) 
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
-        return newSocket(uri, IceMediaStreamDesc.newReliable());
+        if (useRelay) {
+            return newSocket(uri, IceMediaStreamDesc.newReliable());
+        }
+        return newSocket(uri, IceMediaStreamDesc.newReliableNoRelay());
     }
     
     public Socket newUnreliableSocket(final URI uri) 
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
-        return newSocket(uri, IceMediaStreamDesc.newUnreliableUdpStream());
+        if (useRelay) {
+            return newSocket(uri, IceMediaStreamDesc.newUnreliableUdpStream());
+        }
+        return newSocket(uri, IceMediaStreamDesc.newUnreliableUdpStreamNoRelay());
     }
     
     private Socket newSocket(final URI uri, 
