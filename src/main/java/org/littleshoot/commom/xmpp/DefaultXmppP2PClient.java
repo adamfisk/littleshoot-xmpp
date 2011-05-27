@@ -275,7 +275,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
                 new AnswererOfferAnswerListener(chat.getParticipant(), 
                     this.plainTextRelayAddress, callSocketListener, 
-                    offerString, answerKey, readKey));
+                    offerString, answerKey, readKey), false);
         }
         catch (final OfferAnswerConnectException e) {
             // This indicates we could not establish the necessary connections 

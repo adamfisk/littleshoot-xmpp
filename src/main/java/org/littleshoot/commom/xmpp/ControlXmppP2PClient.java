@@ -320,7 +320,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final OfferAnswer offerAnswer;
         try {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
-                new ControlSocketOfferAnswerListener(chat.getParticipant()));
+                new ControlSocketOfferAnswerListener(chat.getParticipant()),
+                false);
                 //new AnswererOfferAnswerListener(chat.getParticipant(), 
                 //    this.plainTextRelayAddress, callSocketListener, 
                 //    offerString, answerKey, readKey));
@@ -720,7 +721,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
                 new AnswererOfferAnswerListener("", 
                     this.plainTextRelayAddress, callSocketListener, 
-                    offerString, null, null));
+                    offerString, null, null), this.useRelay);
         }
         catch (final OfferAnswerConnectException e) {
             // This indicates we could not establish the necessary connections 
