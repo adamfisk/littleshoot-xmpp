@@ -114,20 +114,35 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
         this.serviceName = serviceName;
     }
     
+    @Override
     public Socket newSocket(final URI uri) 
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
-        return newSocket(uri, IceMediaStreamDesc.newReliable());
+        return newSocket(uri, IceMediaStreamDesc.newReliable(), false);
     }
     
+    @Override
     public Socket newUnreliableSocket(final URI uri) 
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
-        return newSocket(uri, IceMediaStreamDesc.newUnreliableUdpStream());
+        return newSocket(uri, IceMediaStreamDesc.newUnreliableUdpStream(), false);
+    }
+    
+
+    @Override
+    public Socket newRawSocket(final URI uri) throws IOException, 
+        NoAnswerException {
+        return newSocket(uri, IceMediaStreamDesc.newReliable(), true);
+    }
+
+    @Override
+    public Socket newRawUnreliableSocket(final URI uri) throws IOException,
+        NoAnswerException {
+        return newSocket(uri, IceMediaStreamDesc.newUnreliableUdpStream(), true);
     }
     
     private Socket newSocket(final URI uri, 
-        final IceMediaStreamDesc streamDesc) 
+        final IceMediaStreamDesc streamDesc, final boolean raw) 
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         
@@ -139,6 +154,10 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
                 this.relayWaitTime, 10 * 1000, streamDesc);
         
         final Socket sock = tcpUdpSocket.newSocket(uri);
+        if (raw) {
+            log.info("Returning raw socket");
+            return sock;
+        }
         log.info("Creating new CipherSocket");
         return new CipherSocket(sock, tcpUdpSocket.getWriteKey(), 
             tcpUdpSocket.getReadKey());
@@ -532,5 +551,4 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
             }
         }
     }
-
 }

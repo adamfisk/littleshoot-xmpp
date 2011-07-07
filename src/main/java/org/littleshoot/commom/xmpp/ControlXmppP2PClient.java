@@ -42,6 +42,7 @@ import org.lastbamboo.common.offer.answer.Offerer;
 import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
 import org.lastbamboo.common.p2p.P2PConstants;
 import org.littleshoot.mina.common.ByteBuffer;
+import org.littleshoot.util.CipherSocket;
 import org.littleshoot.util.CommonUtils;
 import org.littleshoot.util.KeyStorage;
 import org.littleshoot.util.SessionSocketListener;
@@ -134,26 +135,52 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         this.useRelay = useRelay;
     }
     
+    @Override
     public Socket newSocket(final URI uri) 
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         if (useRelay) {
-            return newSocket(uri, IceMediaStreamDesc.newReliable());
+            return newSocket(uri, IceMediaStreamDesc.newReliable(), false);
         }
-        return newSocket(uri, IceMediaStreamDesc.newReliableNoRelay());
+        return newSocket(uri, IceMediaStreamDesc.newReliableNoRelay(), false);
     }
     
+    @Override
     public Socket newUnreliableSocket(final URI uri) 
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         if (useRelay) {
-            return newSocket(uri, IceMediaStreamDesc.newUnreliableUdpStream());
+            return newSocket(uri, IceMediaStreamDesc.newUnreliableUdpStream(), 
+                false);
         }
-        return newSocket(uri, IceMediaStreamDesc.newUnreliableUdpStreamNoRelay());
+        return newSocket(uri, 
+            IceMediaStreamDesc.newUnreliableUdpStreamNoRelay(), false);
+    }
+    
+    @Override
+    public Socket newRawSocket(final URI uri) 
+        throws IOException, NoAnswerException {
+        log.trace ("Creating XMPP socket for URI: {}", uri);
+        if (useRelay) {
+            return newSocket(uri, IceMediaStreamDesc.newReliable(), true);
+        }
+        return newSocket(uri, IceMediaStreamDesc.newReliableNoRelay(), true);
+    }
+    
+    @Override
+    public Socket newRawUnreliableSocket(final URI uri) 
+        throws IOException, NoAnswerException {
+        log.trace ("Creating XMPP socket for URI: {}", uri);
+        if (useRelay) {
+            return newSocket(uri, IceMediaStreamDesc.newUnreliableUdpStream(), 
+                true);
+        }
+        return newSocket(uri, 
+            IceMediaStreamDesc.newUnreliableUdpStreamNoRelay(), true);
     }
     
     private Socket newSocket(final URI uri, 
-        final IceMediaStreamDesc streamDesc) 
+        final IceMediaStreamDesc streamDesc, final boolean raw) 
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         
@@ -182,10 +209,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         
         log.info("Trying to create new socket");
         final Socket sock = tcpUdpSocket.newSocket(uri);
+        if (raw) {
+            return sock;
+        }
         log.info("Creating new CipherSocket");
-        return sock;
-        //return new CipherSocket(sock, tcpUdpSocket.getWriteKey(), 
-        //    tcpUdpSocket.getReadKey());
+        return new CipherSocket(sock, tcpUdpSocket.getWriteKey(), 
+            tcpUdpSocket.getReadKey());
     }
     
     private Socket establishControlSocket(final URI uri, 
@@ -549,7 +578,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
         
         public void run() {
-            log.info("Got message: {} from "+chat.getParticipant(), msg);
+            log.info("Got message: {} from "+chat.getParticipant());
             final Object obj = 
                 msg.getProperty(P2PConstants.MESSAGE_TYPE);
             if (obj == null) {
