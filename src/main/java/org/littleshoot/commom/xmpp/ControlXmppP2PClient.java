@@ -777,11 +777,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 // SDP from it.
                 final Document doc = XmlUtils.toDoc(is, "</message>");
                 log.info("Got XML INVITE: {}", XmlUtils.toString(doc));
-                final String id = XmppUtils.extractId(doc);
-                if (sentMessageIds.contains(id)) {
-                    log.warn("Ignoring message from ourselves");
-                    continue;
-                }
                 final String sdp = XmppUtils.extractSdp(doc);
                 final String key = XmppUtils.extractKey(doc);
                 
