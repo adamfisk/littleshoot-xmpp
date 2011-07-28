@@ -211,7 +211,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 this.offerAnswerFactory,
                 this.relayWaitTime, 20 * 1000, streamDesc);
         
-        log.info("Trying to create new socket");
+        log.info("Trying to create new socket...raw="+raw);
         final Socket sock = tcpUdpSocket.newSocket(uri);
         if (raw) {
             return sock;
@@ -433,6 +433,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final ConnectionConfiguration config = 
             //new ConnectionConfiguration("talk.google.com", 5222, "gmail.com");
             new ConnectionConfiguration(this.host, this.port, this.serviceName);
+        config.setExpiredCertificatesCheckEnabled(true);
+        config.setNotMatchingDomainCheckEnabled(true);
+        config.setSendPresence(false);
+        
         config.setCompressionEnabled(true);
         config.setRosterLoadedAtLogin(true);
         config.setReconnectionAllowed(false);
@@ -712,7 +716,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                             }
                         };
                         
-                    log.info("Calling transaction listener: {}", 
+                    log.info("Calling transaction succeeded on listener: {}", 
                         transactionListener);
                     transactionListener.onTransactionSucceeded(message);
                 } catch (final SAXException e) {
