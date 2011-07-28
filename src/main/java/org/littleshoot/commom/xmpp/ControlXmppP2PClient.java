@@ -376,7 +376,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         //final byte[] readKey = Base64.decodeBase64(readString);
         final String sdp = (String) msg.getProperty(P2PConstants.SDP);
         final ByteBuffer offer = ByteBuffer.wrap(Base64.decodeBase64(sdp));
-        //final String offerString = MinaUtils.toAsciiString(offer);
+        final String offerString = MinaUtils.toAsciiString(offer);
+        log.info("Processing offer: {}", offerString);
         
         final OfferAnswer offerAnswer;
         try {
