@@ -210,7 +210,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         // because we've seen XMPP messages get lost in the ether, and we 
         // just want to send a few of them quickly when this does happen.
         final DefaultTcpUdpSocket tcpUdpSocket = 
-            new DefaultTcpUdpSocket(new ControlSocketOfferer(control), 
+            new DefaultTcpUdpSocket(
+                new ControlSocketOfferer(control, streamDesc), 
                 this.offerAnswerFactory,
                 this.relayWaitTime, 20 * 1000, streamDesc);
         
@@ -673,16 +674,19 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     
     private class ControlSocketOfferer implements Offerer {
 
-        private final Socket control;
+        private Socket control;
+        private final IceMediaStreamDesc streamDesc;
 
-        private ControlSocketOfferer(final Socket control) {
+        private ControlSocketOfferer(final Socket control, 
+            final IceMediaStreamDesc streamDesc) {
             this.control = control;
+            this.streamDesc = streamDesc;
         }
 
         @Override
         public void offer(final URI uri, final byte[] offer,
             final OfferAnswerTransactionListener transactionListener,
-            final KeyStorage keyStore) throws IOException {
+            final KeyStorage keyStore) {
             log.info("Sending message from local address: {}", 
                 this.control.getLocalSocketAddress());
             synchronized (this.control) {
@@ -695,13 +699,24 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 
                 // We also need to catch IOExceptions here for when the control
                 // socket is broken for some reason.
-                final OutputStream os = this.control.getOutputStream();
-                os.write(xml.getBytes("UTF-8"));
-                os.flush();
-                
-                log.info("Wrote message on control socket stream: {}", os);
-                final InputStream is = this.control.getInputStream();
                 try {
+                    writeToControlSocket(xml);
+                } catch (final IOException e) {
+                    log.info("Control socket timed out? We'll try to " +
+                        "establish a new one", e);
+                    try {
+                        this.control = establishControlSocket(uri, streamDesc);
+                        writeToControlSocket(xml);
+                    } catch (final IOException ioe) {
+                        log.warn("Still could not establish or write to " +
+                            "new control socket", ioe);
+                        return;
+                    }
+                }
+                
+                
+                try {
+                    final InputStream is = this.control.getInputStream();
                     log.info("Reading incoming answer on control socket");
                     final Document doc = XmlUtils.toDoc(is, "</message>");
                     final String received = XmlUtils.toString(doc);
@@ -730,9 +745,18 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     log.warn("Could not parse INVITE OK", e);
                     // Close the socket?
                     IOUtils.closeQuietly(this.control);
+                } catch (final IOException e) {
+                    log.warn("Exception handling control socket", e);
                 }
             }
         }
+        
+        private void writeToControlSocket(String xml) throws IOException {
+            final OutputStream os = this.control.getOutputStream();
+            os.write(xml.getBytes("UTF-8"));
+            os.flush();
+            log.info("Wrote message on control socket stream: {}", os);
+         }
     }
 
     private final class ControlSocketOfferAnswerListener 
