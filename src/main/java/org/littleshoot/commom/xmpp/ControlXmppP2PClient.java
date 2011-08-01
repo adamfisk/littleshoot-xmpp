@@ -787,6 +787,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             while (true) {
                 // This will parse the full XML/XMPP message and extract the 
                 // SDP from it.
+                log.info("Trying to read next offer on control socket...");
                 final Document doc = XmlUtils.toDoc(is, "</message>");
                 log.info("Got XML INVITE: {}", XmlUtils.toString(doc));
                 final String sdp = XmppUtils.extractSdp(doc);
@@ -834,8 +835,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         writeMessage(inviteOk, sock);
         log.info("Wrote INVITE OK");
         
-        log.info("Processing offer...");
+        log.info("Passing offer processing to listener...");
         offerAnswer.processOffer(offer);
+        log.info("Done processing offer...");
     }
     
    private void error(final Socket sock) {
