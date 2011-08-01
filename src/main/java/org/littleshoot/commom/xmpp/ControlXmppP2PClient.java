@@ -689,6 +689,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 log.info("Writing XML offer on control socket: {}", xml);
                 
                 // We just block on a single offer and answer.
+                
+                // We also need to catch IOExceptions here for when the control
+                // socket is broken for some reason.
                 final OutputStream os = this.control.getOutputStream();
                 os.write(xml.getBytes("UTF-8"));
                 os.flush();
@@ -748,11 +751,13 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     
         @Override
         public void onTcpSocket(final Socket sock) {
+            log.info("Got a TCP socket!");
             onSocket(sock);
         }
     
         @Override
         public void onUdpSocket(final Socket sock) {
+            log.info("Got a UDP socket!");
             onSocket(sock);
         }
     
@@ -765,7 +770,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             try {
                 readInvites(sock);
             } catch (final IOException e) {
-                log.info("Exception reading invites", e);
+                log.info("Exception reading invites - this will happen " +
+                    "whenever the other side closes the connection, which " +
+                    "will happen all the time.", e);
             } catch (final SAXException e) {
                 log.info("Exception reading invites", e);
             }
@@ -826,6 +833,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         log.info("Writing INVITE OK");
         writeMessage(inviteOk, sock);
         log.info("Wrote INVITE OK");
+        
+        log.info("Processing offer...");
+        offerAnswer.processOffer(offer);
     }
     
    private void error(final Socket sock) {
