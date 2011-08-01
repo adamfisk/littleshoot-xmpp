@@ -87,6 +87,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private final ExecutorService messageProcessingExecutor = 
         Executors.newCachedThreadPool();
     
+    private final ExecutorService inviteProcessingExecutor = 
+        Executors.newCachedThreadPool();
+    
     private final Map<URI, Socket> outgoingControlSockets = 
         new ConcurrentHashMap<URI, Socket>();
 
@@ -790,6 +793,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 log.info("Trying to read next offer on control socket...");
                 final Document doc = XmlUtils.toDoc(is, "</message>");
                 log.info("Got XML INVITE: {}", XmlUtils.toString(doc));
+                
                 final String sdp = XmppUtils.extractSdp(doc);
                 final String key = XmppUtils.extractKey(doc);
                 
@@ -835,8 +839,13 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         writeMessage(inviteOk, sock);
         log.info("Wrote INVITE OK");
         
-        log.info("Passing offer processing to listener...");
-        offerAnswer.processOffer(offer);
+        inviteProcessingExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                log.info("Passing offer processing to listener...");
+                offerAnswer.processOffer(offer);
+            }
+        });
         log.info("Done processing offer...");
     }
     
