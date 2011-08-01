@@ -64,6 +64,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     
     private static final Map<String, Socket> incomingControlSockets = 
         new ConcurrentHashMap<String, Socket>();
+
+    private static final int TIMEOUT = 2 * 60 * 1000;
     
     private final OfferAnswerFactory offerAnswerFactory;
 
@@ -191,21 +193,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         
-        final Socket control;
-        // We want to synchronized on the control sockets and block new 
-        // incoming sockets because it's pointless for them to do much before
-        // the control socket is established, since that's how they'll connect
-        // themselves.
-        synchronized (this.outgoingControlSockets) {
-            if (!this.outgoingControlSockets.containsKey(uri)) {
-                log.info("Creating new control socket");
-                control = establishControlSocket(uri, streamDesc);
-                this.outgoingControlSockets.put(uri, control);
-            } else {
-                log.info("Using existing control socket");
-                control = this.outgoingControlSockets.get(uri);
-            }
-        }
+        final Socket control = controlSocket(uri, streamDesc);
+
         // Note we use a short timeout for waiting for answers. This is 
         // because we've seen XMPP messages get lost in the ether, and we 
         // just want to send a few of them quickly when this does happen.
@@ -225,6 +214,32 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             tcpUdpSocket.getReadKey());
     }
     
+    private Socket controlSocket(final URI uri, 
+        final IceMediaStreamDesc streamDesc) throws IOException {
+        // We want to synchronized on the control sockets and block new 
+        // incoming sockets because it's pointless for them to do much before
+        // the control socket is established, since that's how they'll connect
+        // themselves.
+        synchronized (this.outgoingControlSockets) {
+            if (!this.outgoingControlSockets.containsKey(uri)) {
+                log.info("Creating new control socket");
+                final Socket control = establishControlSocket(uri, streamDesc);
+                this.outgoingControlSockets.put(uri, control);
+                return control;
+            } else {
+                log.info("Using existing control socket");
+                final Socket control = this.outgoingControlSockets.get(uri);
+                if (!control.isClosed()) {
+                    return control;
+                }
+                
+                final Socket newControl = establishControlSocket(uri, streamDesc);
+                this.outgoingControlSockets.put(uri, newControl);
+                return newControl;
+            }
+        }
+    }
+
     private Socket establishControlSocket(final URI uri, 
         final IceMediaStreamDesc streamDesc) throws IOException {
         final DefaultTcpUdpSocket tcpUdpSocket = 
@@ -232,6 +247,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 this.relayWaitTime, 30 * 1000, streamDesc);
         
         final Socket sock = tcpUdpSocket.newSocket(uri);
+        sock.setSoTimeout(TIMEOUT);
         log.info("Created control socket!!");
         //return new CipherSocket(sock, tcpUdpSocket.getWriteKey(), 
         //    tcpUdpSocket.getReadKey());
