@@ -515,7 +515,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         while (!conn.isAuthenticated()) {
             log.info("Waiting for authentication");
             try {
-                Thread.sleep(400);
+                Thread.sleep(200);
             } catch (final InterruptedException e1) {
                 log.error("Exception during sleep?", e1);
             }
