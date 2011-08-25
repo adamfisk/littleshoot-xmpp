@@ -401,6 +401,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 log.info("I am: {}", conn.getUser());
                 //log.info("Message listeners on chat: {}", chat.getListeners());
                 log.info("Created locally: " + createdLocally);
+                
+                // So here's the deal. For whatever reason, it's not predictable
+                // which message listener gets message notifications first. As
+                // a result, we need both of them to handle both message types
+                // even though in theory each should only be in charge of one.
                 chat.addMessageListener(new MessageListener() {
                     
                     @Override
@@ -492,134 +497,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             Base64.encodeBase64String(CommonUtils.generateKey()));
         
         if (this.offerAnswerFactory.isAnswererPortMapped()) {
-            inviteOk.setProperty(P2PConstants.MAPPED_PORT, this.offerAnswerFactory.getMappedPort());
-            inviteOk.setProperty(P2PConstants.PUBLIC_IP, this.publicIp.getPublicIpAddress().getHostAddress());
+            inviteOk.setProperty(P2PConstants.MAPPED_PORT, 
+                this.offerAnswerFactory.getMappedPort());
+            inviteOk.setProperty(P2PConstants.PUBLIC_IP, 
+                this.publicIp.getPublicIpAddress().getHostAddress());
         }
         return inviteOk;
-    }
-
-    private XMPPConnection singleXmppConnection(final String username, 
-        final String password, final String id) throws XMPPException {
-        final ConnectionConfiguration config = 
-            //new ConnectionConfiguration("talk.google.com", 5222, "gmail.com");
-            new ConnectionConfiguration(this.xmppServerHost, 
-                this.xmppServerPort, this.xmppServiceName);
-        config.setExpiredCertificatesCheckEnabled(true);
-        config.setNotMatchingDomainCheckEnabled(true);
-        config.setSendPresence(false);
-        
-        config.setCompressionEnabled(true);
-        config.setRosterLoadedAtLogin(true);
-        config.setReconnectionAllowed(false);
-        
-        // TODO: This should probably be an SSLSocketFactory no??
-        config.setSocketFactory(new SocketFactory() {
-            
-            @Override
-            public Socket createSocket(final InetAddress host, final int port, 
-                final InetAddress localHost, final int localPort) 
-                throws IOException {
-                // We ignore the local port binding.
-                return createSocket(host, port);
-            }
-            
-            @Override
-            public Socket createSocket(final String host, final int port, 
-                final InetAddress localHost, final int localPort)
-                throws IOException, UnknownHostException {
-                // We ignore the local port binding.
-                return createSocket(host, port);
-            }
-            
-            @Override
-            public Socket createSocket(final InetAddress host, final int port) 
-                throws IOException {
-                log.info("Creating socket");
-                final Socket sock = new Socket();
-                sock.connect(new InetSocketAddress(host, port), 40000);
-                log.info("Socket connected");
-                return sock;
-            }
-            
-            @Override
-            public Socket createSocket(final String host, final int port) 
-                throws IOException, UnknownHostException {
-                log.info("Creating socket");
-                return createSocket(InetAddress.getByName(host), port);
-            }
-        });
-        
-        return newConnection(username, password, config, id);
-    }
-
-    private XMPPConnection newConnection(final String username, 
-        final String password, final ConnectionConfiguration config,
-        final String id) throws XMPPException {
-        final XMPPConnection conn = new XMPPConnection(config);
-        conn.connect();
-        
-        log.info("Connection is Secure: {}", conn.isSecureConnection());
-        log.info("Connection is TLS: {}", conn.isUsingTLS());
-        conn.login(username, password, id);
-        
-        while (!conn.isAuthenticated()) {
-            log.info("Waiting for authentication");
-            try {
-                Thread.sleep(200);
-            } catch (final InterruptedException e1) {
-                log.error("Exception during sleep?", e1);
-            }
-        }
-        
-        conn.addConnectionListener(new ConnectionListener() {
-            
-            @Override
-            public void reconnectionSuccessful() {
-                log.info("Reconnection successful...");
-            }
-            
-            @Override
-            public void reconnectionFailed(final Exception e) {
-                log.info("Reconnection failed", e);
-            }
-            
-            @Override
-            public void reconnectingIn(final int time) {
-                log.info("Reconnecting to XMPP server in "+time);
-            }
-            
-            @Override
-            public void connectionClosedOnError(final Exception e) {
-                log.info("XMPP connection closed on error", e);
-                try {
-                    persistentXmppConnection(username, password, id);
-                } catch (final IOException e1) {
-                    log.error("Could not re-establish connection?", e1);
-                }
-            }
-            
-            @Override
-            public void connectionClosed() {
-                log.info("XMPP connection closed. Creating new connection.");
-                try {
-                    persistentXmppConnection(username, password, id);
-                } catch (final IOException e1) {
-                    log.error("Could not re-establish connection?", e1);
-                }
-            }
-        });
-        
-        return conn;
-    }
-
-    @Override
-    public XMPPConnection getXmppConnection() {
-        return xmppConnection;
-    }
-
-    @Override
-    public void addMessageListener(final MessageListener ml) {
-        messageListeners.add(ml);
     }
     
 
@@ -961,6 +844,131 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             }
         });
         log.info("Done processing offer...");
+    }
+    
+
+    private XMPPConnection singleXmppConnection(final String username, 
+        final String password, final String id) throws XMPPException {
+        final ConnectionConfiguration config = 
+            //new ConnectionConfiguration("talk.google.com", 5222, "gmail.com");
+            new ConnectionConfiguration(this.xmppServerHost, 
+                this.xmppServerPort, this.xmppServiceName);
+        config.setExpiredCertificatesCheckEnabled(true);
+        config.setNotMatchingDomainCheckEnabled(true);
+        config.setSendPresence(false);
+        
+        config.setCompressionEnabled(true);
+        config.setRosterLoadedAtLogin(true);
+        config.setReconnectionAllowed(false);
+        
+        // TODO: This should probably be an SSLSocketFactory no??
+        config.setSocketFactory(new SocketFactory() {
+            
+            @Override
+            public Socket createSocket(final InetAddress host, final int port, 
+                final InetAddress localHost, final int localPort) 
+                throws IOException {
+                // We ignore the local port binding.
+                return createSocket(host, port);
+            }
+            
+            @Override
+            public Socket createSocket(final String host, final int port, 
+                final InetAddress localHost, final int localPort)
+                throws IOException, UnknownHostException {
+                // We ignore the local port binding.
+                return createSocket(host, port);
+            }
+            
+            @Override
+            public Socket createSocket(final InetAddress host, final int port) 
+                throws IOException {
+                log.info("Creating socket");
+                final Socket sock = new Socket();
+                sock.connect(new InetSocketAddress(host, port), 40000);
+                log.info("Socket connected");
+                return sock;
+            }
+            
+            @Override
+            public Socket createSocket(final String host, final int port) 
+                throws IOException, UnknownHostException {
+                log.info("Creating socket");
+                return createSocket(InetAddress.getByName(host), port);
+            }
+        });
+        
+        return newConnection(username, password, config, id);
+    }
+
+    private XMPPConnection newConnection(final String username, 
+        final String password, final ConnectionConfiguration config,
+        final String id) throws XMPPException {
+        final XMPPConnection conn = new XMPPConnection(config);
+        conn.connect();
+        
+        log.info("Connection is Secure: {}", conn.isSecureConnection());
+        log.info("Connection is TLS: {}", conn.isUsingTLS());
+        conn.login(username, password, id);
+        
+        while (!conn.isAuthenticated()) {
+            log.info("Waiting for authentication");
+            try {
+                Thread.sleep(200);
+            } catch (final InterruptedException e1) {
+                log.error("Exception during sleep?", e1);
+            }
+        }
+        
+        conn.addConnectionListener(new ConnectionListener() {
+            
+            @Override
+            public void reconnectionSuccessful() {
+                log.info("Reconnection successful...");
+            }
+            
+            @Override
+            public void reconnectionFailed(final Exception e) {
+                log.info("Reconnection failed", e);
+            }
+            
+            @Override
+            public void reconnectingIn(final int time) {
+                log.info("Reconnecting to XMPP server in "+time);
+            }
+            
+            @Override
+            public void connectionClosedOnError(final Exception e) {
+                log.info("XMPP connection closed on error", e);
+                try {
+                    persistentXmppConnection(username, password, id);
+                } catch (final IOException e1) {
+                    log.error("Could not re-establish connection?", e1);
+                }
+            }
+            
+            @Override
+            public void connectionClosed() {
+                log.info("XMPP connection closed. Creating new connection.");
+                try {
+                    persistentXmppConnection(username, password, id);
+                } catch (final IOException e1) {
+                    log.error("Could not re-establish connection?", e1);
+                }
+            }
+        });
+        
+        return conn;
+    }
+
+    @Override
+    public XMPPConnection getXmppConnection() {
+        return xmppConnection;
+    }
+
+    @Override
+    public void addMessageListener(final MessageListener ml) {
+        messageListeners.add(ml);
     }
     
    private void error(final Socket sock) {
