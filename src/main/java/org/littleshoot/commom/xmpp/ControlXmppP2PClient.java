@@ -198,25 +198,27 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
     
     private Socket newSocket(final URI uri, 
-        final IceMediaStreamDesc streamDesc, final boolean raw)
+        final IceMediaStreamDesc streamDesc, final boolean raw) 
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         
         // If the remote host has their ports mapped, we just use those.
         if (streamDesc.isTcp() && urisToMappedServers.containsKey(uri)) {
             log.info("USING MAPPED PORT SERVER!");
-            final InetSocketAddress serverIp = urisToMappedServers.get(uri);
-            final Socket sock = new Socket();
-            try {
-                sock.connect(serverIp, 30 * 1000);
-                return sock;
-            } catch (final IOException e) {
-                log.error("Could not connect", e);
-                urisToMappedServers.remove(uri);
-            }
+            return newMappedServerSocket(uri);
         }
         
         final Socket control = controlSocket(uri, streamDesc);
+        
+        if (streamDesc.isTcp() && urisToMappedServers.containsKey(uri)) {
+            log.info("USING MAPPED PORT SERVER AFTER CONTROL!");
+            // No reason to keep the control socket around if we have the
+            // mapped port. Note we do go through with creating the control in
+            // any case to avoid getting into weird states with socket 
+            // negotiation on both the local and the remote sides.
+            IOUtils.closeQuietly(control);
+            return newMappedServerSocket(uri);
+        }
 
         // Note we use a short timeout for waiting for answers. This is 
         // because we've seen XMPP messages get lost in the ether, and we 
@@ -237,8 +239,23 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             tcpUdpSocket.getReadKey());
     }
     
+    private Socket newMappedServerSocket(final URI uri) throws IOException {
+        final InetSocketAddress serverIp = urisToMappedServers.get(uri);
+        
+        final Socket sock = new Socket();
+        try {
+            sock.connect(serverIp, 30 * 1000);
+            return sock;
+        } catch (final IOException e) {
+            log.info("Could not connect -- peer offline?", e);
+            urisToMappedServers.remove(uri);
+            throw e;
+        }
+    }
+
     private Socket controlSocket(final URI uri, 
-        final IceMediaStreamDesc streamDesc) throws IOException {
+        final IceMediaStreamDesc streamDesc) throws IOException, 
+        NoAnswerException {
         // We want to synchronized on the control sockets and block new 
         // incoming sockets because it's pointless for them to do much before
         // the control socket is established, since that's how they'll connect
@@ -265,7 +282,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
 
     private Socket establishControlSocket(final URI uri, 
-        final IceMediaStreamDesc streamDesc) throws IOException {
+        final IceMediaStreamDesc streamDesc) throws IOException, 
+        NoAnswerException {
         final DefaultTcpUdpSocket tcpUdpSocket = 
             new DefaultTcpUdpSocket(this, this.offerAnswerFactory,
                 this.relayWaitTime, 30 * 1000, streamDesc);
@@ -653,20 +671,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 case P2PConstants.INVITE_OK:
                     // Check to see if the remote host has its port mapped.
                     // if it does, we'll just use that throughout.
-                    final String ip = 
-                        (String) msg.getProperty(P2PConstants.PUBLIC_IP);
-                    log.info("Got public IP address: {}", ip);
-                    if (StringUtils.isNotBlank(ip)) {
-                        final Integer port = 
-                            (Integer) msg.getProperty(P2PConstants.MAPPED_PORT);
-                        if (port != null) {
-                            final InetSocketAddress mapped =
-                                new InetSocketAddress(ip, port);
-                            log.info("ADDING MAPPED SERVER PORT!!");
-                            urisToMappedServers.put(uri, mapped);
-                        }
-                    }
-                    // 
+                    addMappedServer();
                     transactionListener.onTransactionSucceeded(oam);
                     break;
                 case P2PConstants.INVITE_ERROR:
@@ -681,6 +686,23 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     log.error("Did not recognize type: " + type);
                     log.error(XmppUtils.toString(msg));
             }
+        }
+
+        private boolean addMappedServer() {
+            final String ip = (String) msg.getProperty(P2PConstants.PUBLIC_IP);
+            log.info("Got public IP address: {}", ip);
+            if (StringUtils.isNotBlank(ip)) {
+                final Integer port = 
+                    (Integer) msg.getProperty(P2PConstants.MAPPED_PORT);
+                if (port != null) {
+                    final InetSocketAddress mapped =
+                        new InetSocketAddress(ip, port);
+                    log.info("ADDING MAPPED SERVER PORT!!");
+                    urisToMappedServers.put(uri, mapped);
+                    return true;
+                } 
+            }
+            return false;
         }
     }
     
@@ -774,6 +796,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     } catch (final IOException ioe) {
                         log.warn("Still could not establish or write to " +
                             "new control socket", ioe);
+                        return;
+                    } catch (final NoAnswerException nae) {
+                        log.warn("Still could not establish or write to " +
+                            "new control socket", nae);
                         return;
                     }
                 }
