@@ -47,6 +47,7 @@ import org.littleshoot.mina.common.ByteBuffer;
 import org.littleshoot.util.CipherSocket;
 import org.littleshoot.util.CommonUtils;
 import org.littleshoot.util.KeyStorage;
+import org.littleshoot.util.PublicIp;
 import org.littleshoot.util.SessionSocketListener;
 import org.littleshoot.util.mina.MinaUtils;
 import org.littleshoot.util.xml.XmlUtils;
@@ -76,11 +77,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private final int relayWaitTime;
 
-    private final String host;
-
-    private final int port;
-
-    private final String serviceName;
+    private final String xmppServiceName;
 
     private final SessionSocketListener callSocketListener;
 
@@ -99,22 +96,33 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     
     private final Set<String> sentMessageIds = new HashSet<String>();
     
+    private final Map<URI, InetSocketAddress> urisToMappedServers =
+        new ConcurrentHashMap<URI, InetSocketAddress>();
+
+    private final PublicIp publicIp;
+
+    private final String xmppServerHost;
+
+    private final int xmppServerPort;
+    
     public static ControlXmppP2PClient newGoogleTalkDirectClient(
         final OfferAnswerFactory factory,
         final InetSocketAddress plainTextRelayAddress, 
-        final SessionSocketListener callSocketListener, final int relayWait) {
+        final SessionSocketListener callSocketListener, final int relayWait,
+        final PublicIp publicIp) {
         return new ControlXmppP2PClient(factory, plainTextRelayAddress, 
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", 
-            false);
+            false, publicIp);
     }
 
     public static ControlXmppP2PClient newGoogleTalkClient(
         final OfferAnswerFactory factory,
         final InetSocketAddress plainTextRelayAddress, 
-        final SessionSocketListener callSocketListener, final int relayWait) {
+        final SessionSocketListener callSocketListener, final int relayWait,
+        final PublicIp publicIp) {
         return new ControlXmppP2PClient(factory, plainTextRelayAddress, 
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", 
-            true);
+            true, publicIp);
     }
 
     /*
@@ -132,16 +140,17 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final InetSocketAddress plainTextRelayAddress,
         final SessionSocketListener callSocketListener,
         final int relayWaitTime, final String host, final int port, 
-        final String serviceName,
-        final boolean useRelay) {
+        final String serviceName, final boolean useRelay,
+        final PublicIp publicIp) {
         this.offerAnswerFactory = offerAnswerFactory;
         this.plainTextRelayAddress = plainTextRelayAddress;
         this.callSocketListener = callSocketListener;
         this.relayWaitTime = relayWaitTime;
-        this.host = host;
-        this.port = port;
-        this.serviceName = serviceName;
+        this.xmppServerHost = host;
+        this.xmppServerPort = port;
+        this.xmppServiceName = serviceName;
         this.useRelay = useRelay;
+        this.publicIp = publicIp;
     }
     
     @Override
@@ -189,9 +198,23 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
     
     private Socket newSocket(final URI uri, 
-        final IceMediaStreamDesc streamDesc, final boolean raw) 
+        final IceMediaStreamDesc streamDesc, final boolean raw)
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
+        
+        // If the remote host has their ports mapped, we just use those.
+        if (streamDesc.isTcp() && urisToMappedServers.containsKey(uri)) {
+            log.info("Using mapped port!");
+            final InetSocketAddress serverIp = urisToMappedServers.get(uri);
+            final Socket sock = new Socket();
+            try {
+                sock.connect(serverIp, 30 * 1000);
+                return sock;
+            } catch (final IOException e) {
+                log.error("Could not connect", e);
+                urisToMappedServers.remove(uri);
+            }
+        }
         
         final Socket control = controlSocket(uri, streamDesc);
 
@@ -233,7 +256,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     return control;
                 }
                 
-                final Socket newControl = establishControlSocket(uri, streamDesc);
+                final Socket newControl = 
+                    establishControlSocket(uri, streamDesc);
                 this.outgoingControlSockets.put(uri, newControl);
                 return newControl;
             }
@@ -283,8 +307,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 @Override
                 public void processMessage(final Chat ch, final Message msg) {
                     log.info("Got answer on offerer: {}", msg);
-                    messageProcessingExecutor.execute(new XmppInviteOkRunner(msg, 
-                        transactionListener, keyStorage));
+                    messageProcessingExecutor.execute(
+                        new XmppInviteOkRunner(uri, msg, transactionListener, 
+                            keyStorage));
                 }
             });
         
@@ -440,12 +465,18 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
     
     private Message newInviteOk(final byte[] answer) {
+
         final Message inviteOk = new Message();
         inviteOk.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_OK);
         inviteOk.setProperty(P2PConstants.SDP, 
             Base64.encodeBase64String(answer));
         inviteOk.setProperty(P2PConstants.SECRET_KEY, 
             Base64.encodeBase64String(CommonUtils.generateKey()));
+        
+        if (this.offerAnswerFactory.isAnswererPortMapped()) {
+            inviteOk.setProperty(P2PConstants.MAPPED_PORT, this.offerAnswerFactory.getMappedPort());
+            inviteOk.setProperty(P2PConstants.PUBLIC_IP, this.publicIp.getPublicIpAddress());
+        }
         return inviteOk;
     }
 
@@ -453,7 +484,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final String password, final String id) throws XMPPException {
         final ConnectionConfiguration config = 
             //new ConnectionConfiguration("talk.google.com", 5222, "gmail.com");
-            new ConnectionConfiguration(this.host, this.port, this.serviceName);
+            new ConnectionConfiguration(this.xmppServerHost, 
+                this.xmppServerPort, this.xmppServiceName);
         config.setExpiredCertificatesCheckEnabled(true);
         config.setNotMatchingDomainCheckEnabled(true);
         config.setSendPresence(false);
@@ -581,14 +613,15 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         private final Message msg;
         private final OfferAnswerTransactionListener transactionListener;
         private final KeyStorage keyStorage;
+        private final URI uri;
 
-        private XmppInviteOkRunner(final Message msg, 
+        private XmppInviteOkRunner(final URI uri, final Message msg, 
             final OfferAnswerTransactionListener transactionListener, 
             final KeyStorage keyStorage) {
+            this.uri = uri;
             this.msg = msg;
             this.transactionListener = transactionListener;
             this.keyStorage = keyStorage;
-            
         }
         
         @Override
@@ -610,8 +643,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     }
                 };
                 
-            final Object obj = 
-                msg.getProperty(P2PConstants.MESSAGE_TYPE);
+            final Object obj = msg.getProperty(P2PConstants.MESSAGE_TYPE);
             if (obj == null) {
                 log.error("No message type!!");
                 return;
@@ -619,6 +651,21 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             final int type = (Integer) obj;
             switch (type) {
                 case P2PConstants.INVITE_OK:
+                    // Check to see if the remote host has its port mapped.
+                    // if it does, we'll just use that throughout.
+                    final String publicIp = 
+                        (String) msg.getProperty(P2PConstants.PUBLIC_IP);
+                    log.info("Got public IP address: {}", publicIp);
+                    if (StringUtils.isNotBlank(publicIp)) {
+                        final Integer port = 
+                            (Integer) msg.getProperty(P2PConstants.MAPPED_PORT);
+                        if (port != null) {
+                            final InetSocketAddress mapped =
+                                new InetSocketAddress(publicIp, port);
+                            urisToMappedServers.put(uri, mapped);
+                        }
+                    }
+                    // 
                     transactionListener.onTransactionSucceeded(oam);
                     break;
                 case P2PConstants.INVITE_ERROR:
@@ -767,7 +814,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             }
         }
         
-        private void writeToControlSocket(String xml) throws IOException {
+        private void writeToControlSocket(final String xml) throws IOException {
             final OutputStream os = this.control.getOutputStream();
             os.write(xml.getBytes("UTF-8"));
             os.flush();
