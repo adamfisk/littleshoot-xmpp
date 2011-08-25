@@ -204,7 +204,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         
         // If the remote host has their ports mapped, we just use those.
         if (streamDesc.isTcp() && urisToMappedServers.containsKey(uri)) {
-            log.info("Using mapped port!");
+            log.info("USING MAPPED PORT SERVER!");
             final InetSocketAddress serverIp = urisToMappedServers.get(uri);
             final Socket sock = new Socket();
             try {
@@ -475,7 +475,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         
         if (this.offerAnswerFactory.isAnswererPortMapped()) {
             inviteOk.setProperty(P2PConstants.MAPPED_PORT, this.offerAnswerFactory.getMappedPort());
-            inviteOk.setProperty(P2PConstants.PUBLIC_IP, this.publicIp.getPublicIpAddress());
+            inviteOk.setProperty(P2PConstants.PUBLIC_IP, this.publicIp.getPublicIpAddress().getHostAddress());
         }
         return inviteOk;
     }
@@ -653,15 +653,16 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 case P2PConstants.INVITE_OK:
                     // Check to see if the remote host has its port mapped.
                     // if it does, we'll just use that throughout.
-                    final String publicIp = 
+                    final String ip = 
                         (String) msg.getProperty(P2PConstants.PUBLIC_IP);
-                    log.info("Got public IP address: {}", publicIp);
-                    if (StringUtils.isNotBlank(publicIp)) {
+                    log.info("Got public IP address: {}", ip);
+                    if (StringUtils.isNotBlank(ip)) {
                         final Integer port = 
                             (Integer) msg.getProperty(P2PConstants.MAPPED_PORT);
                         if (port != null) {
                             final InetSocketAddress mapped =
-                                new InetSocketAddress(publicIp, port);
+                                new InetSocketAddress(ip, port);
+                            log.info("ADDING MAPPED SERVER PORT!!");
                             urisToMappedServers.put(uri, mapped);
                         }
                     }
