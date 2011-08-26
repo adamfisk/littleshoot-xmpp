@@ -329,15 +329,20 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                         new XmppInviteOkRunner(uri, msg, transactionListener, 
                             keyStorage));
                 }
+                
+                @Override
+                public String toString() {
+                    return "INVITE OK listener for chat with: "+jid;
+                }
             });
         
         log.info("Message listeners just after OFFER: {}", chat.getListeners());
         log.info("Sending INVITE to: {}", jid);
         try {
-            chat.sendMessage(offerMessage);
             final String id = offerMessage.getPacketID();
             log.info("Adding packet ID: {}", id);
             sentMessageIds.add(id);
+            chat.sendMessage(offerMessage);
         } catch (final XMPPException e) {
             log.error("Could not send offer!!", e);
             throw new IOException("Could not send offer", e);
@@ -398,8 +403,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             public void chatCreated(final Chat chat, 
                 final boolean createdLocally) {
                 log.info("Created a chat with: {}", chat.getParticipant());
+                log.info("Chat thread ID: {}", chat.getThreadID());
                 log.info("I am: {}", conn.getUser());
-                //log.info("Message listeners on chat: {}", chat.getListeners());
+                log.info("Message listeners on chat: {}", chat.getListeners());
                 log.info("Created locally: " + createdLocally);
                 
                 // So here's the deal. For whatever reason, it's not predictable
@@ -432,6 +438,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                         }
                         messageProcessingExecutor.execute(
                             new XmppInviteRunner(ch, msg));
+                    }
+                    
+                    @Override
+                    public String toString() {
+                        return "INVITE listener";
                     }
                 });
             }
@@ -587,6 +598,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             }
             return false;
         }
+        
+        @Override
+        public String toString() {
+            return "INVITE OK Runner with URI: "+this.uri;
+        }
     }
     
     /**
@@ -620,6 +636,18 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     //processInvite(chat, msg);
                     processControlInvite(chat, msg);
                     break;
+                case P2PConstants.INVITE_OK:
+                    // We just pass these along to the other listener -- 
+                    // sometimes this listener can get notified first for
+                    // whatever reason.
+                    log.info("Got INVITE_OK on INVITE listener - passing along...listeners:\n"+this.chat.getListeners());
+                    break;
+                case P2PConstants.INVITE_ERROR:
+                    // We just pass these along to the other listener -- 
+                    // sometimes this listener can get notified first for
+                    // whatever reason.
+                    log.info("Got INVITE_ERROR on INVITE listener - passing along");
+                    break;
                 default:
                     log.info("Non-standard message on aswerer..." +
                         "sending to additional listeners, if any: "+ mt);
@@ -638,6 +666,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     ml.processMessage(chat, msg);
                 }
             }
+        }
+        
+        @Override
+        public String toString() {
+            return "INVITE Runner for Chat with: "+chat.getParticipant();
         }
     }
     
