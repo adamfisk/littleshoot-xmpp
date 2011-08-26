@@ -31,6 +31,19 @@ public class XmppUtils {
         final String id = extractXmppProperty(doc, P2PConstants.TRANSACTION_ID);
         return Long.parseLong(id);
     }
+    
+
+    public static String extractFrom(final Document doc) {
+        final String xml = XmlUtils.toString(doc);
+        LOG.info("Got an XMPP message: {}", xml);
+        final XPathUtils xpath = XPathUtils.newXPath(doc);
+        final String str = "/message/From";
+        try {
+            return xpath.getString(str);
+        } catch (final XPathExpressionException e) {
+            throw new Error("Tested XPath no longer working: "+str, e);
+        }
+    }
 
     private static String extractXmppProperty(final Document doc, 
         final String name) {
