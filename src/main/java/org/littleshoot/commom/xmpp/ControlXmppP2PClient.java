@@ -7,6 +7,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -22,15 +23,19 @@ import javax.net.SocketFactory;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
-import org.jivesoftware.smack.Chat;
+import org.apache.commons.lang.math.RandomUtils;
 import org.jivesoftware.smack.ChatManager;
-import org.jivesoftware.smack.ChatManagerListener;
 import org.jivesoftware.smack.ConnectionConfiguration;
 import org.jivesoftware.smack.ConnectionListener;
 import org.jivesoftware.smack.MessageListener;
+import org.jivesoftware.smack.PacketCollector;
+import org.jivesoftware.smack.PacketListener;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
+import org.jivesoftware.smack.filter.PacketFilter;
+import org.jivesoftware.smack.filter.PacketTypeFilter;
 import org.jivesoftware.smack.packet.Message;
+import org.jivesoftware.smack.packet.Packet;
 import org.lastbamboo.common.offer.answer.AnswererOfferAnswerListener;
 import org.lastbamboo.common.offer.answer.IceMediaStreamDesc;
 import org.lastbamboo.common.offer.answer.NoAnswerException;
@@ -63,11 +68,14 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     
+    private final Map<Long, TransactionData> transactionIdsToProcessors =
+        new ConcurrentHashMap<Long, TransactionData>();
+    
     private static final Map<String, Socket> incomingControlSockets = 
         new ConcurrentHashMap<String, Socket>();
 
     private static final int TIMEOUT = 2 * 60 * 1000;
-    
+
     private final OfferAnswerFactory offerAnswerFactory;
 
     private XMPPConnection xmppConnection;
@@ -312,56 +320,31 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     public void offer(final URI uri, final byte[] offer,
         final OfferAnswerTransactionListener transactionListener, 
         final KeyStorage keyStorage) throws IOException {
-
         // We need to convert the URI to a XMPP/Jabber JID.
         final String jid = uri.toASCIIString();
-        
-        final ChatManager chatManager = xmppConnection.getChatManager();
-        final Message offerMessage = newOffer(offer, keyStorage);
-
-        log.info("Creating chat from: {}", xmppConnection.getUser());
-        final Chat chat = chatManager.createChat(jid, 
-            new MessageListener() {
-                @Override
-                public void processMessage(final Chat ch, final Message msg) {
-                    log.info("Got answer on offerer: {}", msg);
-                    messageProcessingExecutor.execute(
-                        new XmppInviteOkRunner(uri, msg, transactionListener, 
-                            keyStorage));
-                }
-                
-                @Override
-                public String toString() {
-                    return "INVITE OK listener for chat with: "+jid;
-                }
-            });
-        
-        log.info("Message listeners just after OFFER: {}", chat.getListeners());
-        log.info("Sending INVITE to: {}", jid);
-        try {
-            final String id = offerMessage.getPacketID();
-            log.info("Adding packet ID: {}", id);
-            sentMessageIds.add(id);
-            chat.sendMessage(offerMessage);
-        } catch (final XMPPException e) {
-            log.error("Could not send offer!!", e);
-            throw new IOException("Could not send offer", e);
-        }
+        final Message offerMessage = newOffer(jid, offer, keyStorage, 
+            new TransactionData(uri, transactionListener, keyStorage));
+        xmppConnection.sendPacket(offerMessage);
     }
     
-    private Message newOffer(final byte[] offer, final KeyStorage keyStorage) {
-        final Message offerMessage = new Message();
+    private Message newOffer(final String jid, final byte[] offer, 
+        final KeyStorage keyStorage, final TransactionData td) {
+        final long id = RandomUtils.nextLong();
+        transactionIdsToProcessors.put(id, td);
+        final Message msg = new Message();
+        msg.setTo(jid);
         log.info("Sending offer: {}", new String(offer));
         final String base64Sdp = 
             Base64.encodeBase64URLSafeString(offer);
-        offerMessage.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE);
-        offerMessage.setProperty(P2PConstants.SDP, base64Sdp);
-        offerMessage.setProperty(P2PConstants.CONTROL, "true");
+        msg.setProperty(P2PConstants.TRANSACTION_ID, id);
+        msg.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE);
+        msg.setProperty(P2PConstants.SDP, base64Sdp);
+        msg.setProperty(P2PConstants.CONTROL, "true");
         if (keyStorage != null) {
-            offerMessage.setProperty(P2PConstants.SECRET_KEY, 
+            msg.setProperty(P2PConstants.SECRET_KEY, 
                     Base64.encodeBase64String(keyStorage.getWriteKey()));
         }
-        return offerMessage;
+        return msg;
     }
 
     private String persistentXmppConnection(final String username, 
@@ -373,7 +356,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 this.xmppConnection = 
                     singleXmppConnection(username, password, id);
                 log.info("Created offerer");
-                addChatManagerListener(this.xmppConnection);
+                processMessages();
+                //addChatManagerListener(this.xmppConnection);
                 return this.xmppConnection.getUser();
             } catch (final XMPPException e) {
                 final String msg = "Error creating XMPP connection";
@@ -396,6 +380,51 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
     }
     
+    private void processMessages() {
+        // Create a packet filter to listen for new messages from a particular
+        // user. We use an AndFilter to combine two other filters.
+        final PacketFilter filter = new PacketTypeFilter(Message.class);
+        
+        // Assume we've created a Connection name "connection".
+
+        // First, register a packet collector using the filter we created.
+        final PacketCollector myCollector = 
+            this.xmppConnection.createPacketCollector(filter);
+        // Normally, you'd do something with the collector, like wait for new
+        // packets.
+
+        // Next, create a packet listener. We use an anonymous inner class for
+        // brevity.
+        final PacketListener myListener = new PacketListener() {
+            @Override
+            public void processPacket(final Packet packet) {
+                final Message msg = (Message) packet;
+                final String id = msg.getPacketID();
+                log.info("Checking message ID: {}", id);
+                if (sentMessageIds.contains(id)) {
+                    log.warn("Message is from us!!");
+                    
+                    // This is a little silly in that we're sending a 
+                    // message back to ourselves, but theoretically
+                    // this should signal to the client thread right
+                    // away that the invite has failed.
+                    final Message error = new Message();
+                    error.setProperty(P2PConstants.MESSAGE_TYPE, 
+                        P2PConstants.INVITE_ERROR);
+                    final String from = msg.getFrom();
+                    error.setTo(from);
+                    xmppConnection.sendPacket(error);
+                } else {
+                    messageProcessingExecutor.execute(
+                            new PacketProcessor(msg));
+                }
+            }
+        };
+        // Register the listener.
+        this.xmppConnection.addPacketListener(myListener, filter);
+    }
+
+    /*
     private void addChatManagerListener(final XMPPConnection conn) {
         final ChatManager cm = conn.getChatManager();
         cm.addChatListener(new ChatManagerListener() {
@@ -448,8 +477,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             }
         });
     }
+    */
     
-    private void processControlInvite(final Chat chat, final Message msg) {
+    private void processControlInvite(final Message msg) {
         final String readString = 
             (String) msg.getProperty(P2PConstants.SECRET_KEY);
         //final byte[] readKey = Base64.decodeBase64(readString);
@@ -461,7 +491,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final OfferAnswer offerAnswer;
         try {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
-                new ControlSocketOfferAnswerListener(chat.getParticipant()),
+                new ControlSocketOfferAnswerListener(msg.getFrom()),
+                //new ControlSocketOfferAnswerListener(chat.getParticipant()),
                 false);
                 //new AnswererOfferAnswerListener(chat.getParticipant(), 
                 //    this.plainTextRelayAddress, callSocketListener, 
@@ -474,33 +505,42 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             final Message error = new Message();
             error.setProperty(P2PConstants.MESSAGE_TYPE, 
                 P2PConstants.INVITE_ERROR);
-            error.setTo(chat.getParticipant());
+            //error.setTo(chat.getParticipant());
+            error.setTo(msg.getFrom());
+            xmppConnection.sendPacket(error);
+            /*
             try {
                 chat.sendMessage(error);
             } catch (final XMPPException e1) {
                 log.error("Could not send error message", e1);
             }
+            */
             //this.m_sipClient.writeInviteRejected(invite, 488, 
             //"Not Acceptable Here");
             return;
         }
         final byte[] answer = offerAnswer.generateAnswer();
-        final Message inviteOk = newInviteOk(answer);
-        inviteOk.setTo(chat.getParticipant());
+        final long tid = (Long) msg.getProperty(P2PConstants.TRANSACTION_ID);
+        final Message inviteOk = newInviteOk(tid, answer);
+        //inviteOk.setTo(chat.getParticipant());
+        inviteOk.setTo(msg.getFrom());
         log.info("Sending CONTROL INVITE OK to {}", inviteOk.getTo());
+        xmppConnection.sendPacket(inviteOk);
+        /*
         try {
             chat.sendMessage(inviteOk);
             log.info("Sent CONTROL INVITE OK");
         } catch (final XMPPException e) {
             log.error("Could not send error message", e);
         }
+        */
         offerAnswer.processOffer(offer);
         log.debug("Done processing CONTROL XMPP INVITE!!!");
     }
     
-    private Message newInviteOk(final byte[] answer) {
-
+    private Message newInviteOk(final long tid, final byte[] answer) {
         final Message inviteOk = new Message();
+        inviteOk.setProperty(P2PConstants.TRANSACTION_ID, tid);
         inviteOk.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_OK);
         inviteOk.setProperty(P2PConstants.SDP, 
             Base64.encodeBase64String(answer));
@@ -517,6 +557,22 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
     
 
+    private final class TransactionData {
+
+        private final URI uri;
+        private final OfferAnswerTransactionListener transactionListener;
+        private final KeyStorage keyStorage;
+
+        public TransactionData(final URI uri,
+            final OfferAnswerTransactionListener transactionListener,
+            final KeyStorage keyStorage) {
+            this.uri = uri;
+            this.transactionListener = transactionListener;
+            this.keyStorage = keyStorage;
+        }
+        
+    }
+    
     /**
      * Runnable for off-loading INVITE OK processing to a thread pool.
      */
@@ -606,21 +662,20 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
     
     /**
-     * Runnable for off-loading INVITE processing to a thread pool.
+     * Runnable for processing incoming packets. These will can be Presence 
+     * packets, info packets from the controller, INVITEs, INVITE OKs, etc.
      */
-    private final class XmppInviteRunner implements Runnable {
+    private final class PacketProcessor implements Runnable {
 
-        private final Chat chat;
         private final Message msg;
 
-        private XmppInviteRunner(final Chat chat, final Message msg) {
-            this.chat = chat;
+        private PacketProcessor(final Message msg) {
             this.msg = msg;
         }
         
         @Override
         public void run() {
-            log.info("Got message from {}", chat.getParticipant());
+            log.info("Got message from {}", msg.getFrom());
             final Object obj = 
                 msg.getProperty(P2PConstants.MESSAGE_TYPE);
             if (obj == null) {
@@ -629,24 +684,41 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 return;
             }
 
+                
             final int mt = (Integer) obj;
             switch (mt) {
                 case P2PConstants.INVITE:
                     log.info("Processing CONTROL INVITE");
-                    //processInvite(chat, msg);
-                    processControlInvite(chat, msg);
+                    processControlInvite(msg);
                     break;
                 case P2PConstants.INVITE_OK:
                     // We just pass these along to the other listener -- 
                     // sometimes this listener can get notified first for
                     // whatever reason.
-                    log.info("Got INVITE_OK on INVITE listener - passing along...listeners:\n"+this.chat.getListeners());
+                    log.info("Got INVITE_OK");
+                    final TransactionData okTd = toTransactionData();
+                    if (okTd == null) {
+                        log.error("No matching transaction ID?");
+                    } else {
+                        log.info("Got transaction data!!");
+                        final OfferAnswerMessage oam = toOfferAnswerMessage(okTd);
+                        addMappedServer();
+                        okTd.transactionListener.onTransactionSucceeded(oam);
+                    }
                     break;
                 case P2PConstants.INVITE_ERROR:
-                    // We just pass these along to the other listener -- 
-                    // sometimes this listener can get notified first for
-                    // whatever reason.
-                    log.info("Got INVITE_ERROR on INVITE listener - passing along");
+                    // This can happen when a message is in fact from us, and
+                    // we send an error message to ourselves, for example. 
+                    // We'll see messages from us when trying to send them to
+                    // non-existent peers, for example.
+                    log.info("Got INVITE_ERROR - transaction failed");
+                    final TransactionData eTd = toTransactionData();
+                    if (eTd == null) {
+                        log.error("No matching transaction ID?");
+                    } else {
+                        final OfferAnswerMessage oam = toOfferAnswerMessage(eTd);
+                        eTd.transactionListener.onTransactionFailed(oam);
+                    }
                     break;
                 default:
                     log.info("Non-standard message on aswerer..." +
@@ -656,6 +728,54 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             }
         }
 
+        private TransactionData toTransactionData() {
+            final Long id = 
+                (Long) msg.getProperty(P2PConstants.TRANSACTION_ID);
+            return transactionIdsToProcessors.remove(id);
+        }
+
+        private OfferAnswerMessage toOfferAnswerMessage(
+            final TransactionData td) {
+            final byte[] body = CommonUtils.decodeBase64(
+                (String) msg.getProperty(P2PConstants.SDP));
+            final byte[] key = CommonUtils.decodeBase64(
+                (String) msg.getProperty(P2PConstants.SECRET_KEY));
+            if (td != null) {
+                td.keyStorage.setReadKey(key);
+            }
+            return new OfferAnswerMessage() {
+                @Override
+                public String getTransactionKey() {
+                    return String.valueOf(hashCode());
+                }
+                @Override
+                public ByteBuffer getBody() {
+                    return ByteBuffer.wrap(body);
+                }
+            };
+        }
+
+        private boolean addMappedServer() {
+            final String ip = (String) msg.getProperty(P2PConstants.PUBLIC_IP);
+            log.info("Got public IP address: {}", ip);
+            if (StringUtils.isNotBlank(ip)) {
+                final Integer port = 
+                    (Integer) msg.getProperty(P2PConstants.MAPPED_PORT);
+                if (port != null) {
+                    final InetSocketAddress mapped =
+                        new InetSocketAddress(ip, port);
+                    log.info("ADDING MAPPED SERVER PORT!!");
+                    try {
+                        urisToMappedServers.put(new URI(msg.getFrom()), mapped);
+                    } catch (final URISyntaxException e) {
+                        log.error("Bad URI?", msg.getFrom());
+                    }
+                    return true;
+                } 
+            }
+            return false;
+        }
+        
         private void notifyListeners() {
             log.info("Notifying global listeners");
             synchronized (messageListeners) {
@@ -663,14 +783,14 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     log.info("No message listeners to forward to");
                 }
                 for (final MessageListener ml : messageListeners) {
-                    ml.processMessage(chat, msg);
+                    ml.processMessage(null, msg);
                 }
             }
         }
         
         @Override
         public String toString() {
-            return "INVITE Runner for Chat with: "+chat.getParticipant();
+            return "INVITE Runner for Chat with: "+msg.getFrom();
         }
     }
     
@@ -693,7 +813,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 this.control.getLocalSocketAddress());
             synchronized (this.control) {
                 log.info("Got lock on control socket");
-                final Message msg = newOffer(offer, null);
+                final Message msg = 
+                    newOffer(uri.toASCIIString(), offer, keyStore, 
+                        new TransactionData(uri, transactionListener, keyStore));
                 final String xml = toXml(msg);
                 log.info("Writing XML offer on control socket: {}", xml);
                 
@@ -826,17 +948,18 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 
                 final String sdp = XmppUtils.extractSdp(doc);
                 final String key = XmppUtils.extractKey(doc);
+                final Long tid = XmppUtils.extractTransactionId(doc);
                 
                 final ByteBuffer offer = 
                     ByteBuffer.wrap(Base64.decodeBase64(sdp));
-                processOffer(offer, sock, key);
+                processOffer(tid, offer, sock, key);
             }
         }
     }
     
 
-    private void processOffer(final ByteBuffer offer, final Socket sock, 
-        final String readKey) throws IOException {
+    private void processOffer(final long tid, final ByteBuffer offer, 
+        final Socket sock, final String readKey) throws IOException {
         log.info("Processing offer...");
         final String offerString = MinaUtils.toAsciiString(offer);
         
@@ -864,7 +987,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         log.info("Creating answer");
         final byte[] answer = offerAnswer.generateAnswer();
         log.info("Creating INVITE OK");
-        final Message inviteOk = newInviteOk(answer);
+        final Message inviteOk = newInviteOk(tid, answer);
         log.info("Writing INVITE OK");
         writeMessage(inviteOk, sock);
         log.info("Wrote INVITE OK");
@@ -894,7 +1017,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         config.setRosterLoadedAtLogin(true);
         config.setReconnectionAllowed(false);
         
-        // TODO: This should probably be an SSLSocketFactory no??
         config.setSocketFactory(new SocketFactory() {
             
             @Override

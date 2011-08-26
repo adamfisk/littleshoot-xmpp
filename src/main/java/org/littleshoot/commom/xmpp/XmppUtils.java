@@ -25,6 +25,12 @@ public class XmppUtils {
     public static String extractKey(final Document doc) {
         return extractXmppProperty(doc, P2PConstants.SECRET_KEY);
     }
+    
+
+    public static long extractTransactionId(final Document doc) {
+        final String id = extractXmppProperty(doc, P2PConstants.TRANSACTION_ID);
+        return Long.parseLong(id);
+    }
 
     private static String extractXmppProperty(final Document doc, 
         final String name) {
