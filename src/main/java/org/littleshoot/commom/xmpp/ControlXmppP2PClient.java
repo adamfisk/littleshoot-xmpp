@@ -27,7 +27,6 @@ import org.apache.commons.lang.math.RandomUtils;
 import org.jivesoftware.smack.ConnectionConfiguration;
 import org.jivesoftware.smack.ConnectionListener;
 import org.jivesoftware.smack.MessageListener;
-import org.jivesoftware.smack.PacketCollector;
 import org.jivesoftware.smack.PacketListener;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
@@ -111,17 +110,21 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private final String xmppServerHost;
 
     private final int xmppServerPort;
+
+    private final SocketFactory socketFactory;
+
     
     public static ControlXmppP2PClient newGoogleTalkDirectClient(
         final OfferAnswerFactory factory,
         final InetSocketAddress plainTextRelayAddress, 
         final SessionSocketListener callSocketListener, final int relayWait,
-        final PublicIp publicIp) {
+        final PublicIp publicIp, final SocketFactory socketFactory) {
         return new ControlXmppP2PClient(factory, plainTextRelayAddress, 
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", 
-            false, publicIp);
+            false, publicIp, socketFactory);
     }
 
+    /*
     public static ControlXmppP2PClient newGoogleTalkClient(
         final OfferAnswerFactory factory,
         final InetSocketAddress plainTextRelayAddress, 
@@ -131,6 +134,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", 
             true, publicIp);
     }
+    */
 
     /*
     public static DefaultXmppP2PClient newFacebookChatClient(
@@ -148,7 +152,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final SessionSocketListener callSocketListener,
         final int relayWaitTime, final String host, final int port, 
         final String serviceName, final boolean useRelay,
-        final PublicIp publicIp) {
+        final PublicIp publicIp, final SocketFactory socketFactory) {
         this.offerAnswerFactory = offerAnswerFactory;
         this.plainTextRelayAddress = plainTextRelayAddress;
         this.callSocketListener = callSocketListener;
@@ -158,6 +162,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         this.xmppServiceName = serviceName;
         this.useRelay = useRelay;
         this.publicIp = publicIp;
+        this.socketFactory = socketFactory;
     }
     
     @Override
@@ -249,7 +254,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private Socket newMappedServerSocket(final URI uri) throws IOException {
         final InetSocketAddress serverIp = urisToMappedServers.get(uri);
         
-        final Socket sock = new Socket();
+        final Socket sock = this.socketFactory.createSocket();
         try {
             sock.connect(serverIp, 30 * 1000);
             return sock;
@@ -347,20 +352,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
     
     private void processMessages() {
-        // Create a packet filter to listen for new messages from a particular
-        // user. We use an AndFilter to combine two other filters.
         final PacketFilter filter = new PacketTypeFilter(Message.class);
-        
-        // Assume we've created a Connection name "connection".
-
-        // First, register a packet collector using the filter we created.
-        final PacketCollector myCollector = 
-            this.xmppConnection.createPacketCollector(filter);
-        // Normally, you'd do something with the collector, like wait for new
-        // packets.
-
-        // Next, create a packet listener. We use an anonymous inner class for
-        // brevity.
         final PacketListener myListener = new PacketListener() {
             @Override
             public void processPacket(final Packet packet) {
@@ -400,8 +392,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
 
     private void processControlInvite(final Message msg) {
-        final String readString = 
-            (String) msg.getProperty(P2PConstants.SECRET_KEY);
+        // TODO: The control socket is currently plain text. We should encrypt
+        // it.
+        //final String readString = 
+        //    (String) msg.getProperty(P2PConstants.SECRET_KEY);
         //final byte[] readKey = Base64.decodeBase64(readString);
         final String sdp = (String) msg.getProperty(P2PConstants.SDP);
         final ByteBuffer offer = ByteBuffer.wrap(Base64.decodeBase64(sdp));
@@ -545,9 +539,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 (String) msg.getProperty(P2PConstants.SDP));
             final byte[] key = CommonUtils.decodeBase64(
                 (String) msg.getProperty(P2PConstants.SECRET_KEY));
-            if (td != null) {
-                td.keyStorage.setReadKey(key);
-            }
+            td.keyStorage.setReadKey(key);
             return new OfferAnswerMessage() {
                 @Override
                 public String getTransactionKey() {
