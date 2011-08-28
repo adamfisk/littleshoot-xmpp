@@ -217,7 +217,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         // If the remote host has their ports mapped, we just use those.
         if (streamDesc.isTcp() && urisToMappedServers.containsKey(uri)) {
             log.info("USING MAPPED PORT SERVER!");
-            return newMappedServerSocket(uri);
+            return newMappedServerSocket(uri, raw);
         }
         
         final Socket control = controlSocket(uri, streamDesc);
@@ -229,7 +229,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             // any case to avoid getting into weird states with socket 
             // negotiation on both the local and the remote sides.
             IOUtils.closeQuietly(control);
-            return newMappedServerSocket(uri);
+            return newMappedServerSocket(uri, raw);
         }
 
         // Note we use a short timeout for waiting for answers. This is 
@@ -251,10 +251,15 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             tcpUdpSocket.getReadKey());
     }
     
-    private Socket newMappedServerSocket(final URI uri) throws IOException {
+    private Socket newMappedServerSocket(final URI uri, final boolean raw) 
+        throws IOException {
         final InetSocketAddress serverIp = urisToMappedServers.get(uri);
-        
-        final Socket sock = this.socketFactory.createSocket();
+        final Socket sock;
+        if (raw) {
+            sock = new Socket();
+        } else {
+            sock = this.socketFactory.createSocket();
+        }
         try {
             sock.connect(serverIp, 30 * 1000);
             return sock;
