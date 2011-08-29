@@ -327,11 +327,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         // We need to convert the URI to a XMPP/Jabber JID.
         final String jid = uri.toASCIIString();
         final Message offerMessage = 
-            newOfferToEstablishControl(jid, offer, transactionListener, keyStorage);
+            newInviteToEstablishControlSocket(jid, offer, transactionListener, 
+                keyStorage);
         xmppConnection.sendPacket(offerMessage);
     }
     
-    private Message newOfferToEstablishControl(final String jid, 
+    private Message newInviteToEstablishControlSocket(final String jid, 
         final byte[] offer, 
         final OfferAnswerTransactionListener transactionListener,
         final KeyStorage keyStorage) {
@@ -355,7 +356,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 throw new IllegalArgumentException("Null write key!!");
             } else {
                 msg.setProperty(P2PConstants.SECRET_KEY, 
-                        Base64.encodeBase64String(writeKey));
+                    Base64.encodeBase64String(writeKey));
             }
         } else {
             log.error("Null key storage?"+ThreadUtils.dumpStack());
@@ -394,11 +395,13 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             (Long)msg.getProperty(P2PConstants.TRANSACTION_ID));
     }
     
-    protected Message newError(final String from, final long tid) {
+    protected Message newError(final String from, final Long tid) {
         final Message error = new Message();
         error.setProperty(P2PConstants.MESSAGE_TYPE, 
             P2PConstants.INVITE_ERROR);
-        error.setProperty(P2PConstants.TRANSACTION_ID, tid);
+        if (tid != null) {
+            error.setProperty(P2PConstants.TRANSACTION_ID, tid);
+        }
         error.setTo(from);
         return error;
     }
@@ -447,10 +450,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         log.debug("Done processing CONTROL XMPP INVITE!!!");
     }
     
-    private Message newInviteOk(final long tid, final byte[] answer, 
+    private Message newInviteOk(final Long tid, final byte[] answer, 
         final byte[] answerKey) {
         final Message inviteOk = new Message();
-        inviteOk.setProperty(P2PConstants.TRANSACTION_ID, tid);
+        if (tid != null) {
+            inviteOk.setProperty(P2PConstants.TRANSACTION_ID, tid.longValue());
+        }
         inviteOk.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_OK);
         inviteOk.setProperty(P2PConstants.SDP, 
             Base64.encodeBase64String(answer));
@@ -637,7 +642,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             synchronized (this.control) {
                 log.info("Got lock on control socket...");
                 final Message msg = 
-                    newOfferOverControlSocket(uri.toASCIIString(), offer, keyStore);
+                    newInviteOverControlSocket(uri.toASCIIString(), offer, keyStore);
                 final String xml = toXml(msg);
                 log.info("Writing XML offer on control socket: {}", xml);
                 
@@ -670,7 +675,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     log.info("Reading incoming answer on control socket");
                     final Document doc = XmlUtils.toDoc(is, "</message>");
                     final String received = XmlUtils.toString(doc);
-                    log.info("Got XML answer: {}", received);
+                    log.info("Got INVITE OK on CONTROL socket: {}", received);
                     
                     // We need to extract the SDP to establish the new socket.
                     final String sdp = XmppUtils.extractSdp(doc);
@@ -690,10 +695,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     final String encodedKey = XmppUtils.extractKey(doc);
                     final byte[] key = CommonUtils.decodeBase64(encodedKey);
                     keyStore.setReadKey(key);
-                    final Long tid = XmppUtils.extractTransactionId(doc);
+                    //final Long tid = XmppUtils.extractTransactionId(doc);
                     log.info("Got INVITE OK establishing new socket over " +
-                        "control socket...from: "+from+" key: "+key+
-                        " transaction ID: "+tid);
+                        "control socket...from: "+from+" read key: "+key);
                     
                     log.info("Calling transaction succeeded on listener: {}", 
                         transactionListener);
@@ -708,7 +712,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             }
         }
         
-        private Message newOfferOverControlSocket(final String jid, 
+        private Message newInviteOverControlSocket(final String jid, 
             final byte[] offer, final KeyStorage keyStorage) {
             final Message msg = new Message();
             msg.setTo(jid);
@@ -724,6 +728,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     log.error("Null write key!!!");
                     throw new IllegalArgumentException("Null write key!!");
                 } else {
+                    log.info("Setting client write key to: {}", writeKey);
                     msg.setProperty(P2PConstants.SECRET_KEY, 
                             Base64.encodeBase64String(writeKey));
                 }
@@ -803,11 +808,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 final String sdp = XmppUtils.extractSdp(doc);
                 final String from = XmppUtils.extractFrom(doc);
                 final String key = XmppUtils.extractKey(doc);
-                final Long tid = XmppUtils.extractTransactionId(doc);
                 
                 final ByteBuffer offer = 
                     ByteBuffer.wrap(Base64.decodeBase64(sdp));
-                processOfferOnControlSocket(tid, offer, sock, key, from);
+                processInviteOverControlSocket(offer, sock, key, from);
             }
         }
     }
@@ -825,20 +829,21 @@ public class ControlXmppP2PClient implements XmppP2PClient {
      * @throws IOException If any IO error occurs, including normal socket
      * closings.
      */
-    private void processOfferOnControlSocket(final long tid, 
+    private void processInviteOverControlSocket(
         final ByteBuffer offer, final Socket controlSocket, 
         final String readKey, final String from) throws IOException {
         log.info("Processing offer...");
+        if (StringUtils.isBlank(readKey)) {
+            log.error("Null key?");
+            throw new NullPointerException("Null key for new secure socket!!");
+        }
         final String offerString = MinaUtils.toAsciiString(offer);
         
         final byte[] answerKey = CommonUtils.generateKey();
         final OfferAnswer offerAnswer;
-        final byte[] key;
-        if (StringUtils.isBlank(readKey)) {
-            key = null;
-        } else {
-            key = readKey.getBytes("UTF-8");
-        }
+        final byte[] key = readKey.getBytes("UTF-8");
+        log.info("Read key from client INVITE -- our read key: {}", key);
+        
         try {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
                 new AnswererOfferAnswerListener("", 
@@ -849,13 +854,13 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             // This indicates we could not establish the necessary connections 
             // for generating our candidates.
             log.warn("We could not create candidates for offer", e);
-            error(from, tid, controlSocket);
+            error(from, null, controlSocket);
             return;
         }
         log.info("Creating answer");
         final byte[] answer = offerAnswer.generateAnswer();
         log.info("Creating INVITE OK");
-        final Message inviteOk = newInviteOk(tid, answer, answerKey);
+        final Message inviteOk = newInviteOk(null, answer, answerKey);
         log.info("Writing INVITE OK");
         writeMessage(inviteOk, controlSocket);
         log.info("Wrote INVITE OK");
@@ -1027,7 +1032,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         messageListeners.add(ml);
     }
     
-    private void error(final String from, final long tid, final Socket sock) {
+    private void error(final String from, final Long tid, final Socket sock) {
         final Message error = newError(from, tid);
         try {
             writeMessage(error, sock);
