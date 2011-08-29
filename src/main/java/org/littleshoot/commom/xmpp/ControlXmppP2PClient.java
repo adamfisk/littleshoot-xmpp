@@ -227,7 +227,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         // just want to send a few of them quickly when this does happen.
         final DefaultTcpUdpSocket tcpUdpSocket = 
             new DefaultTcpUdpSocket(
-                new ControlSocketOfferer(control, streamDesc), 
+                new OffererOverControlSocket(control, streamDesc), 
                 this.offerAnswerFactory,
                 this.relayWaitTime, 20 * 1000, streamDesc);
         
@@ -326,15 +326,19 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final KeyStorage keyStorage) throws IOException {
         // We need to convert the URI to a XMPP/Jabber JID.
         final String jid = uri.toASCIIString();
-        final Message offerMessage = newOffer(jid, offer, keyStorage, 
-            new TransactionData(transactionListener, keyStorage));
+        final Message offerMessage = 
+            newOfferToEstablishControl(jid, offer, transactionListener, keyStorage);
         xmppConnection.sendPacket(offerMessage);
     }
     
-    private Message newOffer(final String jid, final byte[] offer, 
-        final KeyStorage keyStorage, final TransactionData td) {
+    private Message newOfferToEstablishControl(final String jid, 
+        final byte[] offer, 
+        final OfferAnswerTransactionListener transactionListener,
+        final KeyStorage keyStorage) {
         final long id = RandomUtils.nextLong();
-        transactionIdsToProcessors.put(id, td);
+        transactionIdsToProcessors.put(id, 
+            new TransactionData(transactionListener, keyStorage));
+        //transactionIdsToProcessors.put(id, td);
         final Message msg = new Message();
         msg.setTo(jid);
         log.info("Sending offer: {}", new String(offer));
@@ -430,7 +434,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
         final byte[] answer = offerAnswer.generateAnswer();
         final long tid = (Long) msg.getProperty(P2PConstants.TRANSACTION_ID);
-        final Message inviteOk = newInviteOk(tid, answer, CommonUtils.generateKey());
+        
+        // TODO: This is a throwaway key here since the control socket is not
+        // encrypted as of this writing.
+        final Message inviteOk = 
+            newInviteOk(tid, answer, CommonUtils.generateKey());
         inviteOk.setTo(msg.getFrom());
         log.info("Sending CONTROL INVITE OK to {}", inviteOk.getTo());
         xmppConnection.sendPacket(inviteOk);
@@ -606,12 +614,15 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
     }
     
-    private class ControlSocketOfferer implements Offerer {
+    /**
+     * This class sends offers over an established control socket.
+     */
+    private class OffererOverControlSocket implements Offerer {
 
         private Socket control;
         private final IceMediaStreamDesc streamDesc;
 
-        private ControlSocketOfferer(final Socket control, 
+        private OffererOverControlSocket(final Socket control, 
             final IceMediaStreamDesc streamDesc) {
             this.control = control;
             this.streamDesc = streamDesc;
@@ -626,8 +637,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             synchronized (this.control) {
                 log.info("Got lock on control socket...");
                 final Message msg = 
-                    newOffer(uri.toASCIIString(), offer, keyStore, 
-                        new TransactionData(transactionListener, keyStore));
+                    newOfferOverControlSocket(uri.toASCIIString(), offer, keyStore);
                 final String xml = toXml(msg);
                 log.info("Writing XML offer on control socket: {}", xml);
                 
@@ -696,6 +706,31 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     log.warn("Exception handling control socket", e);
                 }
             }
+        }
+        
+        private Message newOfferOverControlSocket(final String jid, 
+            final byte[] offer, final KeyStorage keyStorage) {
+            final Message msg = new Message();
+            msg.setTo(jid);
+            log.info("Sending offer: {}", new String(offer));
+            final String base64Sdp = 
+                Base64.encodeBase64URLSafeString(offer);
+            msg.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE);
+            msg.setProperty(P2PConstants.SDP, base64Sdp);
+            msg.setProperty(P2PConstants.CONTROL, "true");
+            if (keyStorage != null) {
+                final byte[] writeKey = keyStorage.getWriteKey();
+                if (writeKey == null) {
+                    log.error("Null write key!!!");
+                    throw new IllegalArgumentException("Null write key!!");
+                } else {
+                    msg.setProperty(P2PConstants.SECRET_KEY, 
+                            Base64.encodeBase64String(writeKey));
+                }
+            } else {
+                log.error("Null key storage?"+ThreadUtils.dumpStack());
+            }
+            return msg;
         }
         
         private void writeToControlSocket(final String xml) throws IOException {
