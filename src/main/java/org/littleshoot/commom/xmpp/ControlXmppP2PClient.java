@@ -841,7 +841,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         
         final byte[] answerKey = CommonUtils.generateKey();
         final OfferAnswer offerAnswer;
-        final byte[] key = readKey.getBytes("UTF-8");
+        final byte[] key = CommonUtils.decodeBase64(readKey);
         log.info("Read key from client INVITE -- our read key: {}", key);
         
         try {
