@@ -52,6 +52,7 @@ import org.littleshoot.util.CommonUtils;
 import org.littleshoot.util.KeyStorage;
 import org.littleshoot.util.PublicIp;
 import org.littleshoot.util.SessionSocketListener;
+import org.littleshoot.util.ThreadUtils;
 import org.littleshoot.util.mina.MinaUtils;
 import org.littleshoot.util.xml.XmlUtils;
 import org.slf4j.Logger;
@@ -133,17 +134,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         return new ControlXmppP2PClient(factory, plainTextRelayAddress, 
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", 
             true, publicIp);
-    }
-    */
-
-    /*
-    public static DefaultXmppP2PClient newFacebookChatClient(
-        final OfferAnswerFactory factory,
-        final SessionSocketListener socketListener, 
-        final SessionSocketListener callSocketListener, final int relayWait) {
-        return new DefaultXmppP2PClient(factory, socketListener, 
-            callSocketListener, relayWait, "chat.facebook.com", 5222, 
-            "chat.facebook.com");
     }
     */
 
@@ -244,11 +234,14 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         log.info("Trying to create new socket...raw="+raw);
         final Socket sock = tcpUdpSocket.newSocket(uri);
         if (raw) {
+            log.info("Returning raw socket");
             return sock;
         }
-        log.info("Creating new CipherSocket");
-        return new CipherSocket(sock, tcpUdpSocket.getWriteKey(), 
-            tcpUdpSocket.getReadKey());
+        final byte[] writeKey = tcpUdpSocket.getWriteKey();
+        final byte[] readKey = tcpUdpSocket.getReadKey();
+        log.info("Creating new CipherSocket with write key {} and read key {}", 
+            writeKey, readKey);
+        return new CipherSocket(sock, writeKey, readKey);
     }
     
     private Socket newMappedServerSocket(final URI uri, final boolean raw) 
@@ -352,8 +345,16 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         msg.setProperty(P2PConstants.SDP, base64Sdp);
         msg.setProperty(P2PConstants.CONTROL, "true");
         if (keyStorage != null) {
-            msg.setProperty(P2PConstants.SECRET_KEY, 
-                    Base64.encodeBase64String(keyStorage.getWriteKey()));
+            final byte[] writeKey = keyStorage.getWriteKey();
+            if (writeKey == null) {
+                log.error("Null write key!!!");
+                throw new IllegalArgumentException("Null write key!!");
+            } else {
+                msg.setProperty(P2PConstants.SECRET_KEY, 
+                        Base64.encodeBase64String(writeKey));
+            }
+        } else {
+            log.error("Null key storage?"+ThreadUtils.dumpStack());
         }
         return msg;
     }
@@ -398,9 +399,13 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         return error;
     }
 
+    /**
+     * This processes an INVITE to establish a control socket.
+     * 
+     * @param msg The INVITE message received from the XMPP server to establish
+     * the control socket.
+     */
     private void processControlInvite(final Message msg) {
-        // TODO: The control socket is currently plain text. We should encrypt
-        // it.
         //final String readString = 
         //    (String) msg.getProperty(P2PConstants.SECRET_KEY);
         //final byte[] readKey = Base64.decodeBase64(readString);
@@ -425,7 +430,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
         final byte[] answer = offerAnswer.generateAnswer();
         final long tid = (Long) msg.getProperty(P2PConstants.TRANSACTION_ID);
-        final Message inviteOk = newInviteOk(tid, answer);
+        final Message inviteOk = newInviteOk(tid, answer, CommonUtils.generateKey());
         inviteOk.setTo(msg.getFrom());
         log.info("Sending CONTROL INVITE OK to {}", inviteOk.getTo());
         xmppConnection.sendPacket(inviteOk);
@@ -434,14 +439,17 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         log.debug("Done processing CONTROL XMPP INVITE!!!");
     }
     
-    private Message newInviteOk(final long tid, final byte[] answer) {
+    private Message newInviteOk(final long tid, final byte[] answer, 
+        final byte[] answerKey) {
         final Message inviteOk = new Message();
         inviteOk.setProperty(P2PConstants.TRANSACTION_ID, tid);
         inviteOk.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_OK);
         inviteOk.setProperty(P2PConstants.SDP, 
             Base64.encodeBase64String(answer));
-        inviteOk.setProperty(P2PConstants.SECRET_KEY, 
-            Base64.encodeBase64String(CommonUtils.generateKey()));
+        if (answerKey != null) {
+            inviteOk.setProperty(P2PConstants.SECRET_KEY, 
+                Base64.encodeBase64String(answerKey));
+        }
         
         if (this.offerAnswerFactory.isAnswererPortMapped()) {
             inviteOk.setProperty(P2PConstants.MAPPED_PORT, 
@@ -616,7 +624,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             log.info("Sending message from local address: {}", 
                 this.control.getLocalSocketAddress());
             synchronized (this.control) {
-                log.info("Got lock on control socket");
+                log.info("Got lock on control socket...");
                 final Message msg = 
                     newOffer(uri.toASCIIString(), offer, keyStore, 
                         new TransactionData(transactionListener, keyStore));
@@ -658,18 +666,25 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     final String sdp = XmppUtils.extractSdp(doc);
                     final byte[] sdpBytes = Base64.decodeBase64(sdp); 
                     
-                    final OfferAnswerMessage message = 
-                        new OfferAnswerMessage() {
-                            @Override
-                            public String getTransactionKey() {
-                                return String.valueOf(hashCode());
-                            }
-                            @Override
-                            public ByteBuffer getBody() {
-                                return ByteBuffer.wrap(sdpBytes);
-                            }
-                        };
-                        
+                    final OfferAnswerMessage message = new OfferAnswerMessage(){
+                        @Override
+                        public String getTransactionKey() {
+                            return String.valueOf(hashCode());
+                        }
+                        @Override
+                        public ByteBuffer getBody() {
+                            return ByteBuffer.wrap(sdpBytes);
+                        }
+                    };
+                    final String from = XmppUtils.extractFrom(doc);
+                    final String encodedKey = XmppUtils.extractKey(doc);
+                    final byte[] key = CommonUtils.decodeBase64(encodedKey);
+                    keyStore.setReadKey(key);
+                    final Long tid = XmppUtils.extractTransactionId(doc);
+                    log.info("Got INVITE OK establishing new socket over " +
+                        "control socket...from: "+from+" key: "+key+
+                        " transaction ID: "+tid);
+                    
                     log.info("Calling transaction succeeded on listener: {}", 
                         transactionListener);
                     transactionListener.onTransactionSucceeded(message);
@@ -716,12 +731,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     
         @Override
         public void onUdpSocket(final Socket sock) {
-            log.info("Got a UDP socket!");
+            log.info("Got a UDP socket: {}", sock);
             onSocket(sock);
         }
     
         private void onSocket(final Socket sock) {
-            log.info("Got control socket on 'server' side");
+            log.info("Got control socket on 'server' side: {}", sock);
             // We use one control socket for sending offers and another one
             // for receiving offers. This is an incoming socket for 
             // receiving offers.
@@ -757,15 +772,27 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 
                 final ByteBuffer offer = 
                     ByteBuffer.wrap(Base64.decodeBase64(sdp));
-                processOffer(tid, offer, sock, key, from);
+                processOfferOnControlSocket(tid, offer, sock, key, from);
             }
         }
     }
     
 
-    private void processOffer(final long tid, final ByteBuffer offer, 
-        final Socket sock, final String readKey, final String from) 
-        throws IOException {
+    /**
+     * This processes an incoming offer received on the control socket after
+     * the control socket has already been established.
+     * 
+     * @param tid The ID of the transaction.
+     * @param offer The offer itself.
+     * @param controlSocket The control socket.
+     * @param readKey The key for decrypting incoming data.
+     * @param from The user this is from.
+     * @throws IOException If any IO error occurs, including normal socket
+     * closings.
+     */
+    private void processOfferOnControlSocket(final long tid, 
+        final ByteBuffer offer, final Socket controlSocket, 
+        final String readKey, final String from) throws IOException {
         log.info("Processing offer...");
         final String offerString = MinaUtils.toAsciiString(offer);
         
@@ -787,15 +814,15 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             // This indicates we could not establish the necessary connections 
             // for generating our candidates.
             log.warn("We could not create candidates for offer", e);
-            error(from, tid, sock);
+            error(from, tid, controlSocket);
             return;
         }
         log.info("Creating answer");
         final byte[] answer = offerAnswer.generateAnswer();
         log.info("Creating INVITE OK");
-        final Message inviteOk = newInviteOk(tid, answer);
+        final Message inviteOk = newInviteOk(tid, answer, answerKey);
         log.info("Writing INVITE OK");
-        writeMessage(inviteOk, sock);
+        writeMessage(inviteOk, controlSocket);
         log.info("Wrote INVITE OK");
         
         inviteProcessingExecutor.submit(new Runnable() {
