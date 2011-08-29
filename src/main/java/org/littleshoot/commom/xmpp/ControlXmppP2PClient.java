@@ -256,8 +256,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final InetSocketAddress serverIp = urisToMappedServers.get(uri);
         final Socket sock;
         if (raw) {
+            log.info("Creating raw socket and skipping socket factory");
             sock = new Socket();
         } else {
+            log.info("Using socket factory: {}", this.socketFactory);
             sock = this.socketFactory.createSocket();
         }
         try {
@@ -779,7 +781,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
                 new AnswererOfferAnswerListener("", 
                     this.plainTextRelayAddress, callSocketListener, 
-                    offerString, null, null), this.useRelay);
+                    offerString, answerKey, key), this.useRelay);
         }
         catch (final OfferAnswerConnectException e) {
             // This indicates we could not establish the necessary connections 
