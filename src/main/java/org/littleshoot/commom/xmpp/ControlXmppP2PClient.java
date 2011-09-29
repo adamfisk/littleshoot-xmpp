@@ -52,7 +52,6 @@ import org.littleshoot.util.CommonUtils;
 import org.littleshoot.util.KeyStorage;
 import org.littleshoot.util.PublicIp;
 import org.littleshoot.util.SessionSocketListener;
-import org.littleshoot.util.ThreadUtils;
 import org.littleshoot.util.mina.MinaUtils;
 import org.littleshoot.util.xml.XmlUtils;
 import org.slf4j.Logger;
@@ -332,6 +331,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final Message offerMessage = 
             newInviteToEstablishControlSocket(jid, offer, transactionListener, 
                 keyStorage);
+        XmppUtils.activateOtr(jid, xmppConnection);
         xmppConnection.sendPacket(offerMessage);
     }
     
@@ -435,8 +435,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         // TODO: This is a throwaway key here since the control socket is not
         // encrypted as of this writing.
         final Message inviteOk = newInviteOk(tid, answer, writeKey);
-        inviteOk.setTo(msg.getFrom());
+        final String to = msg.getFrom();
+        inviteOk.setTo(to);
         log.info("Sending CONTROL INVITE OK to {}", inviteOk.getTo());
+        XmppUtils.activateOtr(to, xmppConnection);
         xmppConnection.sendPacket(inviteOk);
 
         offerAnswer.processOffer(offer);
