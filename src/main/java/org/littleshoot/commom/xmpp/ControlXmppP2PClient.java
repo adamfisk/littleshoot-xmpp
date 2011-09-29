@@ -331,7 +331,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final Message offerMessage = 
             newInviteToEstablishControlSocket(jid, offer, transactionListener, 
                 keyStorage);
-        XmppUtils.activateOtr(jid, xmppConnection);
+        XmppUtils.goOffTheRecord(jid, xmppConnection);
         xmppConnection.sendPacket(offerMessage);
     }
     
@@ -438,7 +438,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final String to = msg.getFrom();
         inviteOk.setTo(to);
         log.info("Sending CONTROL INVITE OK to {}", inviteOk.getTo());
-        XmppUtils.activateOtr(to, xmppConnection);
+        XmppUtils.goOffTheRecord(to, xmppConnection);
         xmppConnection.sendPacket(inviteOk);
 
         offerAnswer.processOffer(offer);

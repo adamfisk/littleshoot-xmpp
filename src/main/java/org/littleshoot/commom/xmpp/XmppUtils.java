@@ -367,7 +367,7 @@ public class XmppUtils {
     //// The following includes a whole bunch of custom Google Talk XMPP 
     //// messages.
     
-    public static Packet activateOtr(final String jidToOtr, 
+    public static Packet goOffTheRecord(final String jidToOtr, 
         final XMPPConnection conn) {
         LOG.info("Activating OTR for {}...", jidToOtr);
         final String query =
@@ -377,7 +377,7 @@ public class XmppUtils {
         return setGTalkProperty(conn, query);
     }
     
-    public static Packet deactivateOtr(final String jidToOtr, 
+    public static Packet goOnTheRecord(final String jidToOtr, 
         final XMPPConnection conn) {
         LOG.info("Activating OTR for {}...", jidToOtr);
         final String query =
