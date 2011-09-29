@@ -12,21 +12,24 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.atomic.AtomicReference;
 
-import javax.xml.stream.XMLStreamException;
-
 import org.apache.commons.lang.StringUtils;
 import org.junit.Test;
 import org.littleshoot.commom.xmpp.XmppUtils;
 import org.littleshoot.util.xml.XmlUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
 
 
 public class XmppUtilsTest {
 
+    private static final Logger LOG = 
+        LoggerFactory.getLogger(XmppUtilsTest.class);
     private static final int SERVER_PORT = 4822;
 
-    @Test public void testXmpp() throws Exception {
+    @Test 
+    public void testXmpp() throws Exception {
         final File testFile = 
             new File("src/test/resources/testXmppMessage.txt");
         final InputStream is = new FileInputStream(testFile);
@@ -37,7 +40,8 @@ public class XmppUtilsTest {
         assertEquals("", key);
     }
     
-    @Test public void testXmlSocketReads() throws Exception {
+    @Test 
+    public void testXmlSocketReads() throws Exception {
         final AtomicReference<String> ref = new AtomicReference<String>("");
         startServer(ref);
         Thread.yield();
