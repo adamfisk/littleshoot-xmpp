@@ -56,6 +56,16 @@ public class XmppUtils {
             new GenericIQProvider());
         ProviderManager.getInstance().addIQProvider(
             "query", "google:jingleinfo", new GenericIQProvider());
+        
+        ProviderManager.getInstance().addIQProvider(
+            "query", "google:roster", new GenericIQProvider());
+        
+        ProviderManager.getInstance().addIQProvider(
+            "item", "gr:t", new GenericIQProvider());
+        ProviderManager.getInstance().addIQProvider(
+                "item", "gr:mc", new GenericIQProvider());
+        ProviderManager.getInstance().addIQProvider(
+                "item", "gr:mc", new GenericIQProvider());
     }
 
     /**
@@ -396,6 +406,13 @@ public class XmppUtils {
         LOG.info("Getting shared status...");
         return getGTalkProperty(conn, 
             "<query xmlns='google:shared-status' version='2'/>");
+    }
+    
+    public static Packet extendedRoster(final XMPPConnection conn) {
+        LOG.info("Requesting extended roster");
+        final String query =
+            "<query xmlns='jabber:iq:roster' xmlns:gr='google:roster' gr:ext='2'/>";
+        return getGTalkProperty(conn, query);
     }
     
     public static Collection<InetSocketAddress> googleStunServers(
