@@ -307,7 +307,7 @@ public class XmppUtils {
             @Override
             public Socket createSocket(final String host, final int port) 
                 throws IOException, UnknownHostException {
-                LOG.info("Creating socket");
+                LOG.info("Creating socket for host: {}", host);
                 return createSocket(InetAddress.getByName(host), port);
             }
         });
