@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.SocketFactory;
 
@@ -112,6 +113,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private final int xmppServerPort;
 
     private final SocketFactory socketFactory;
+
+    private AtomicBoolean loggedOut = new AtomicBoolean(false);
 
     
     public static ControlXmppP2PClient newGoogleTalkDirectClient(
@@ -313,12 +316,14 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     @Override
     public String login(final String username, final String password) 
         throws IOException {
+        this.loggedOut.set(false);
         return persistentXmppConnection(username, password, "SHOOT-");
     }
     
     @Override
     public String login(final String username, final String password,
         final String id) throws IOException {
+        this.loggedOut.set(false);
         return persistentXmppConnection(username, password, id);
     }
     
@@ -993,6 +998,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             @Override
             public void connectionClosedOnError(final Exception e) {
                 log.info("XMPP connection closed on error", e);
+                if (loggedOut.get()) {
+                    log.info("Not maintaining connection when the user has " +
+                        "explictly logged out.");
+                    return;
+                }
                 try {
                     persistentXmppConnection(username, password, id);
                 } catch (final IOException e1) {
@@ -1003,6 +1013,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             @Override
             public void connectionClosed() {
                 log.info("XMPP connection closed. Creating new connection.");
+                if (loggedOut.get()) {
+                    log.info("Not maintaining connection when the user has " +
+                        "explictly logged out.");
+                    return;
+                }
                 try {
                     persistentXmppConnection(username, password, id);
                 } catch (final IOException e1) {
@@ -1046,5 +1061,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private String toXml(final Message msg) {
         return msg.toXML() + "\n";
+    }
+
+    @Override
+    public void logout() {
+        this.loggedOut.set(true);
+        this.xmppConnection.disconnect();
     }
 }
