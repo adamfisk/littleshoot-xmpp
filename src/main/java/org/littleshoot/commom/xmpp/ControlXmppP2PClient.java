@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.net.SocketFactory;
 
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.io.IOExceptionWithCause;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.math.RandomUtils;
@@ -889,6 +890,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 final String msg = "Error creating XMPP connection";
                 log.error(msg, e);
                 exc = e;    
+            } catch (final IOException e) {
+                // Indicates an authentication error. Break out of our loop.
+                break;
             }
             
             // Gradual backoff.
@@ -907,7 +911,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
 
     private XMPPConnection singleXmppConnection(final String username, 
-        final String password, final String id) throws XMPPException {
+        final String password, final String id) throws XMPPException, IOException {
         final ConnectionConfiguration config = 
             //new ConnectionConfiguration("talk.google.com", 5222, "gmail.com");
             new ConnectionConfiguration(this.xmppServerHost, 
@@ -961,13 +965,18 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private XMPPConnection newConnection(final String username, 
         final String password, final ConnectionConfiguration config,
-        final String id) throws XMPPException {
+        final String id) throws IOException, XMPPException {
         final XMPPConnection conn = new XMPPConnection(config);
         conn.connect();
         
         log.info("Connection is Secure: {}", conn.isSecureConnection());
         log.info("Connection is TLS: {}", conn.isUsingTLS());
-        conn.login(username, password, id);
+        try {
+            conn.login(username, password, id);
+        } catch (final XMPPException e) {
+            log.info("Credentials error!", e);
+            throw new IOExceptionWithCause("Authentication error", e);
+        }
         
         while (!conn.isAuthenticated()) {
             log.info("Waiting for authentication");
