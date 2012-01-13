@@ -1075,6 +1075,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     @Override
     public void logout() {
         this.loggedOut.set(true);
-        this.xmppConnection.disconnect();
+        if (this.xmppConnection != null) {
+            this.xmppConnection.disconnect();
+        }
     }
 }
