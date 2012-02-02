@@ -371,6 +371,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 final Message msg = (Message) packet;
                 final String id = msg.getPacketID();
                 log.info("Checking message ID: {}", id);
+                if (loggedOut.get()) {
+                    log.warn("Got a message while logged out?");
+                    return;
+                }
                 if (sentMessageIds.contains(id)) {
                     log.warn("Message is from us!!");
                     
@@ -1007,21 +1011,16 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             @Override
             public void connectionClosedOnError(final Exception e) {
                 log.info("XMPP connection closed on error", e);
-                if (loggedOut.get()) {
-                    log.info("Not maintaining connection when the user has " +
-                        "explictly logged out.");
-                    return;
-                }
-                try {
-                    persistentXmppConnection(username, password, id);
-                } catch (final IOException e1) {
-                    log.error("Could not re-establish connection?", e1);
-                }
+                handleClose();
             }
             
             @Override
             public void connectionClosed() {
                 log.info("XMPP connection closed. Creating new connection.");
+                handleClose();
+            }
+            
+            private void handleClose() {
                 if (loggedOut.get()) {
                     log.info("Not maintaining connection when the user has " +
                         "explictly logged out.");
