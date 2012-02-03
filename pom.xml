@@ -48,6 +48,12 @@
 
         <dependency>
             <groupId>org.littleshoot</groupId>
+            <artifactId>dnssec4j</artifactId>
+            <version>0.1-SNAPSHOT</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.littleshoot</groupId>
             <artifactId>mina-util</artifactId>
             <version>${ls.version}</version>
         </dependency>

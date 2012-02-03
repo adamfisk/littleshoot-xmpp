@@ -48,6 +48,7 @@ import org.lastbamboo.common.offer.answer.OfferAnswerTransactionListener;
 import org.lastbamboo.common.offer.answer.Offerer;
 import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
 import org.lastbamboo.common.p2p.P2PConstants;
+import org.littleshoot.dnssec4j.DnsSec;
 import org.littleshoot.mina.common.ByteBuffer;
 import org.littleshoot.util.CipherSocket;
 import org.littleshoot.util.CommonUtils;
@@ -59,6 +60,7 @@ import org.littleshoot.util.xml.XmlUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
+import org.xbill.DNS.DNSSEC.DNSSECException;
 import org.xml.sax.SAXException;
 
 /**
@@ -150,6 +152,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         this.plainTextRelayAddress = plainTextRelayAddress;
         this.callSocketListener = callSocketListener;
         this.relayWaitTime = relayWaitTime;
+        
         this.xmppServerHost = host;
         this.xmppServerPort = port;
         this.xmppServiceName = serviceName;
@@ -914,11 +917,25 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
     }
 
+    private InetAddress getHost(final String host) throws IOException {
+        if (XmppConfig.isUseDnsSec()) {
+            try {
+                return DnsSec.getByName(host);
+            } catch (final DNSSECException e) {
+                log.warn("DNSSEC error. Bad signature?", e);
+                throw new Error("DNSSEC error. Bad signature?", e);
+            }
+        } 
+        return InetAddress.getByName(host);
+    }
+    
     private XMPPConnection singleXmppConnection(final String username, 
         final String password, final String id) throws XMPPException, IOException {
+        
+        final InetAddress host = getHost(this.xmppServerHost);
         final ConnectionConfiguration config = 
             //new ConnectionConfiguration("talk.google.com", 5222, "gmail.com");
-            new ConnectionConfiguration(this.xmppServerHost, 
+            new ConnectionConfiguration(host.getHostAddress(), 
                 this.xmppServerPort, this.xmppServiceName);
         config.setExpiredCertificatesCheckEnabled(true);
         config.setNotMatchingDomainCheckEnabled(true);
