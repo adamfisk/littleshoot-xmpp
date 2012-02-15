@@ -15,9 +15,12 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.SocketFactory;
 
@@ -47,8 +50,10 @@ import org.lastbamboo.common.offer.answer.OfferAnswerMessage;
 import org.lastbamboo.common.offer.answer.OfferAnswerTransactionListener;
 import org.lastbamboo.common.offer.answer.Offerer;
 import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
+import org.lastbamboo.common.p2p.P2PConnectionEvent;
 import org.lastbamboo.common.p2p.P2PConstants;
-import org.littleshoot.dnssec4j.DnsSec;
+import org.lastbamboo.common.p2p.P2PConnectionListener;
+import org.littleshoot.dnssec4j.VerifiedAddressFactory;
 import org.littleshoot.mina.common.ByteBuffer;
 import org.littleshoot.util.CipherSocket;
 import org.littleshoot.util.CommonUtils;
@@ -60,7 +65,6 @@ import org.littleshoot.util.xml.XmlUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
-import org.xbill.DNS.DNSSEC.DNSSECException;
 import org.xml.sax.SAXException;
 
 /**
@@ -76,7 +80,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private static final Map<String, Socket> incomingControlSockets = 
         new ConcurrentHashMap<String, Socket>();
 
-    private static final int TIMEOUT = 2 * 60 * 1000;
+    private static final int TIMEOUT = 8 * 60 * 1000;
 
     private final OfferAnswerFactory offerAnswerFactory;
 
@@ -282,7 +286,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             if (!this.outgoingControlSockets.containsKey(uri)) {
                 log.info("Creating new control socket");
                 final Socket control = establishControlSocket(uri, streamDesc);
-                this.outgoingControlSockets.put(uri, control);
                 return control;
             } else {
                 log.info("Using existing control socket");
@@ -293,10 +296,45 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 
                 final Socket newControl = 
                     establishControlSocket(uri, streamDesc);
-                this.outgoingControlSockets.put(uri, newControl);
                 return newControl;
             }
         }
+    }
+
+    private final Executor exec = Executors.newCachedThreadPool(new ThreadFactory() {
+        
+        private AtomicInteger counter = new AtomicInteger(0);
+        
+        @Override
+        public Thread newThread(final Runnable r) {
+            final Thread thread = 
+                new Thread(r, "P2P-Connection-Notify-Thread-"+counter.incrementAndGet());
+            return thread;
+        }
+    });
+    
+    private void notifyConnectionListeners(final URI jid, final Socket sock, 
+        final boolean incoming, final boolean connected) {
+        notifyConnectionListeners(jid.toASCIIString(), sock, incoming, connected);
+    }
+    
+    private void notifyConnectionListeners(final String jid, final Socket sock, 
+        final boolean incoming, final boolean connected) {
+        final Runnable runner = new Runnable() {
+            @Override
+            public void run() {
+                final InetSocketAddress isa = 
+                    (InetSocketAddress) sock.getRemoteSocketAddress();
+                final P2PConnectionEvent event = 
+                    new P2PConnectionEvent(jid, isa, incoming, connected);
+                synchronized (listeners) {
+                    for (final P2PConnectionListener listener : listeners) {
+                        listener.onConnectivityEvent(event);
+                    }
+                }
+            }
+        };
+        exec.execute(runner);
     }
 
     private Socket establishControlSocket(final URI uri, 
@@ -313,8 +351,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final byte[] readKey = tcpUdpSocket.getReadKey();
         log.info("Creating new CipherSocket with write key {} and read key {}", 
             writeKey, readKey);
-        return new CipherSocket(sock, writeKey, readKey);
-        //return sock;
+        
+        final Socket cs =  new CipherSocket(sock, writeKey, readKey);
+        
+        notifyConnectionListeners(uri, cs, false, true);
+        this.outgoingControlSockets.put(uri, cs);
+        return cs;
     }
 
     @Override
@@ -660,6 +702,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 try {
                     writeToControlSocket(xml);
                 } catch (final IOException e) {
+                    closeOutgoing(uri, control);
                     log.info("Control socket timed out? We'll try to " +
                         "establish a new one", e);
                     try {
@@ -668,10 +711,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     } catch (final IOException ioe) {
                         log.warn("Still could not establish or write to " +
                             "new control socket", ioe);
+                        closeOutgoing(uri, control);
                         return;
                     } catch (final NoAnswerException nae) {
                         log.warn("Still could not establish or write to " +
                             "new control socket", nae);
+                        closeOutgoing(uri, control);
                         return;
                     }
                 }
@@ -712,9 +757,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 } catch (final SAXException e) {
                     log.warn("Could not parse INVITE OK", e);
                     // Close the socket?
-                    IOUtils.closeQuietly(this.control);
+                    closeOutgoing(uri, control);
                 } catch (final IOException e) {
                     log.warn("Exception handling control socket", e);
+                    closeOutgoing(uri, control);
                 }
             }
         }
@@ -785,6 +831,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             // We use one control socket for sending offers and another one
             // for receiving offers. This is an incoming socket for 
             // receiving offers.
+            notifyConnectionListeners(this.fullJid, sock, true, true);
             incomingControlSockets.put(this.fullJid, sock);
             try {
                 readInvites(sock);
@@ -792,8 +839,14 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 log.info("Exception reading invites - this will happen " +
                     "whenever the other side closes the connection, which " +
                     "will happen all the time.", e);
+                IOUtils.closeQuietly(sock);
+                notifyConnectionListeners(this.fullJid, sock, true, false);
+                incomingControlSockets.remove(this.fullJid);
             } catch (final SAXException e) {
                 log.info("Exception reading invites", e);
+                IOUtils.closeQuietly(sock);
+                notifyConnectionListeners(this.fullJid, sock, true, false);
+                incomingControlSockets.remove(this.fullJid);
             }
         }
     
@@ -881,6 +934,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
     
 
+    private void closeOutgoing(final URI uri, final Socket control) {
+        notifyConnectionListeners(uri, control, false, false);
+        IOUtils.closeQuietly(control);
+        this.outgoingControlSockets.remove(uri);
+    }
+
     private String persistentXmppConnection(final String username, 
         final String password, final String id) throws IOException {
         XMPPException exc = null;
@@ -918,15 +977,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
 
     private InetAddress getHost(final String host) throws IOException {
-        if (XmppConfig.isUseDnsSec()) {
-            try {
-                return DnsSec.getByName(host);
-            } catch (final DNSSECException e) {
-                log.warn("DNSSEC error. Bad signature?", e);
-                throw new Error("DNSSEC error. Bad signature?", e);
-            }
-        } 
-        return InetAddress.getByName(host);
+        return VerifiedAddressFactory.newVerifiedInetAddress(host, 
+            XmppConfig.isUseDnsSec());
     }
     
     private XMPPConnection singleXmppConnection(final String username, 
@@ -1093,6 +1145,16 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         this.loggedOut.set(true);
         if (this.xmppConnection != null) {
             this.xmppConnection.disconnect();
+        }
+    }
+
+    private final Collection<P2PConnectionListener> listeners =
+        new ArrayList<P2PConnectionListener>();
+    
+    @Override
+    public void addListener(final P2PConnectionListener listener) {
+        synchronized (listeners) {
+            this.listeners.add(listener);
         }
     }
 }

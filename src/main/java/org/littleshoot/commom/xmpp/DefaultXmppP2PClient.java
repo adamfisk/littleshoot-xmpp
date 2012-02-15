@@ -34,6 +34,7 @@ import org.lastbamboo.common.offer.answer.OfferAnswerMessage;
 import org.lastbamboo.common.offer.answer.OfferAnswerTransactionListener;
 import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
 import org.lastbamboo.common.p2p.P2PConstants;
+import org.lastbamboo.common.p2p.P2PConnectionListener;
 import org.littleshoot.mina.common.ByteBuffer;
 import org.littleshoot.util.CipherSocket;
 import org.littleshoot.util.CommonUtils;
@@ -571,5 +572,10 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     public void logout() {
         this.loggedOut.set(true);
         this.xmppConnection.disconnect();
+    }
+
+    @Override
+    public void addListener(P2PConnectionListener listener) {
+        // TODO Not supported for now.
     }
 }
