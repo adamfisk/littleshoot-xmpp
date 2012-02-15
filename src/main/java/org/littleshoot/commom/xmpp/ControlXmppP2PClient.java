@@ -1152,7 +1152,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         new ArrayList<P2PConnectionListener>();
     
     @Override
-    public void addListener(final P2PConnectionListener listener) {
+    public void addConnectionListener(final P2PConnectionListener listener) {
         synchronized (listeners) {
             this.listeners.add(listener);
         }

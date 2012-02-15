@@ -575,7 +575,7 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     }
 
     @Override
-    public void addListener(P2PConnectionListener listener) {
+    public void addConnectionListener(P2PConnectionListener listener) {
         // TODO Not supported for now.
     }
 }
