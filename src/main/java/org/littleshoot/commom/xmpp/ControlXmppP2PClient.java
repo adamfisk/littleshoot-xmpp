@@ -213,6 +213,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final IceMediaStreamDesc streamDesc, final boolean raw) 
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
+        final String us = this.xmppConnection.getUser().trim();
+        log.trace("Our JID is: "+us);
+        if (us.equals(uri.toASCIIString())) {
+            log.info("Not connecting to ourselves.");
+            throw new IOException("Not connecting to ourselves: "+us);
+        }
         
         // If the remote host has their ports mapped, we just use those.
         if (streamDesc.isTcp() && urisToMappedServers.containsKey(uri)) {
