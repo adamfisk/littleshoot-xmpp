@@ -578,4 +578,15 @@ public class DefaultXmppP2PClient implements XmppP2PClient {
     public void addConnectionListener(P2PConnectionListener listener) {
         // TODO Not supported for now.
     }
+
+    @Override
+    public boolean isLoggedOut() {
+        return this.loggedOut.get();
+    }
+
+    @Override
+    public void handleClose() {
+        // TODO Auto-generated method stub
+        
+    }
 }

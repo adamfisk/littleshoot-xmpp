@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.net.SocketFactory;
 import javax.xml.xpath.XPathExpressionException;
 
+import org.apache.commons.io.IOExceptionWithCause;
 import org.apache.commons.lang.StringUtils;
 import org.jivesoftware.smack.ConnectionConfiguration;
 import org.jivesoftware.smack.ConnectionListener;
@@ -28,6 +29,7 @@ import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smack.packet.XMPPError;
 import org.jivesoftware.smack.provider.ProviderManager;
 import org.lastbamboo.common.p2p.P2PConstants;
+import org.littleshoot.dnssec4j.VerifiedAddressFactory;
 import org.littleshoot.util.xml.XPathUtils;
 import org.littleshoot.util.xml.XmlUtils;
 import org.slf4j.Logger;
@@ -211,7 +213,7 @@ public class XmppUtils {
     private static final Map<String, XMPPConnection> xmppConnections = 
         new ConcurrentHashMap<String, XMPPConnection>();
 
-    private static XMPPConnection persistentXmppConnection(final String username, 
+    static XMPPConnection persistentXmppConnection(final String username, 
             final String password, final String id) throws IOException {
         return persistentXmppConnection(username, password, id, 4);
     }
@@ -219,6 +221,15 @@ public class XmppUtils {
     public static XMPPConnection persistentXmppConnection(final String username, 
         final String password, final String id, final int attempts) 
         throws IOException {
+        return persistentXmppConnection(username, password, id, attempts, 
+            "talk.google.com", 5222, "gmail.com", null);
+    }
+    
+    public static XMPPConnection persistentXmppConnection(final String username, 
+        final String password, final String id, final int attempts,
+        final String host, final int port, final String serviceName,
+        final XmppP2PClient clientListener) 
+            throws IOException {
         final String key = username+password;
         if (xmppConnections.containsKey(key)) {
             final XMPPConnection conn = xmppConnections.get(key);
@@ -235,7 +246,8 @@ public class XmppUtils {
             try {
                 LOG.info("Attempting XMPP connection...");
                 final XMPPConnection conn = 
-                    singleXmppConnection(username, password, id);
+                    singleXmppConnection(username, password, id, host, port, 
+                        serviceName, clientListener);
                 
                 // Make sure we signify gchat support.
                 XmppUtils.getSharedStatus(conn);
@@ -250,7 +262,7 @@ public class XmppUtils {
             
             // Gradual backoff.
             try {
-                Thread.sleep(i * 600);
+                Thread.sleep(i * 200);
             } catch (final InterruptedException e) {
                 LOG.info("Interrupted?", e);
             }
@@ -262,19 +274,37 @@ public class XmppUtils {
             throw new IOException("Could not log in?");
         }
     }
-
+    
+    private static InetAddress getHost(final String host) throws IOException {
+        return VerifiedAddressFactory.newVerifiedInetAddress(host, 
+            XmppConfig.isUseDnsSec());
+    }
+    
     private static XMPPConnection singleXmppConnection(final String username, 
-        final String password, final String id) throws XMPPException {
-        final ConnectionConfiguration config = 
-            new ConnectionConfiguration("talk.google.com", 5222, "gmail.com");
-            //new ConnectionConfiguration(this.host, this.port, this.serviceName);
-        config.setCompressionEnabled(true);
-        config.setRosterLoadedAtLogin(false);
-        config.setReconnectionAllowed(false);
+        final String password, final String id, final String xmppServerHost, 
+        final int xmppServerPort, final String xmppServiceName, 
+        final XmppP2PClient clientListener) throws XMPPException, IOException {
         
+        final InetAddress host = getHost(xmppServerHost);
+        System.out.println("Connecting to "+host+" port "+xmppServerPort+" service "+xmppServiceName);
+        final ConnectionConfiguration config = 
+            new ConnectionConfiguration(host.getHostAddress(), 
+                xmppServerPort, xmppServiceName);
         config.setExpiredCertificatesCheckEnabled(true);
         config.setNotMatchingDomainCheckEnabled(true);
         config.setSendPresence(false);
+        
+        config.setCompressionEnabled(true);
+        
+        config.setRosterLoadedAtLogin(true);
+        config.setReconnectionAllowed(false);
+        
+        config.setVerifyChainEnabled(true);
+        
+        // TODO: Enable this. Google Talk root CA is equifax, which java 
+        // doesn't support by default.
+        //config.setVerifyRootCAEnabled(true);
+        config.setSelfSignedCertificateEnabled(false);
         
         config.setSocketFactory(new SocketFactory() {
             
@@ -307,28 +337,34 @@ public class XmppUtils {
             @Override
             public Socket createSocket(final String host, final int port) 
                 throws IOException, UnknownHostException {
-                LOG.info("Creating socket for host: {}", host);
+                LOG.info("Creating socket");
                 return createSocket(InetAddress.getByName(host), port);
             }
         });
         
-        return newConnection(username, password, config, id);
+        return newConnection(username, password, config, id, clientListener);
     }
 
     private static XMPPConnection newConnection(final String username, 
         final String password, final ConnectionConfiguration config,
-        final String id) throws XMPPException {
+        final String id, final XmppP2PClient clientListener) 
+        throws IOException, XMPPException {
         final XMPPConnection conn = new XMPPConnection(config);
         conn.connect();
         
         LOG.info("Connection is Secure: {}", conn.isSecureConnection());
         LOG.info("Connection is TLS: {}", conn.isUsingTLS());
-        conn.login(username, password, id);
+        try {
+            conn.login(username, password, id);
+        } catch (final XMPPException e) {
+            LOG.info("Credentials error!", e);
+            throw new IOExceptionWithCause("Authentication error", e);
+        }
         
         while (!conn.isAuthenticated()) {
             LOG.info("Waiting for authentication");
             try {
-                Thread.sleep(400);
+                Thread.sleep(200);
             } catch (final InterruptedException e1) {
                 LOG.error("Exception during sleep?", e1);
             }
@@ -336,33 +372,36 @@ public class XmppUtils {
         
         conn.addConnectionListener(new ConnectionListener() {
             
+            @Override
             public void reconnectionSuccessful() {
                 LOG.info("Reconnection successful...");
             }
             
+            @Override
             public void reconnectionFailed(final Exception e) {
                 LOG.info("Reconnection failed", e);
             }
             
+            @Override
             public void reconnectingIn(final int time) {
                 LOG.info("Reconnecting to XMPP server in "+time);
             }
             
+            @Override
             public void connectionClosedOnError(final Exception e) {
                 LOG.info("XMPP connection closed on error", e);
-                try {
-                    persistentXmppConnection(username, password, id);
-                } catch (final IOException e1) {
-                    LOG.error("Could not re-establish connection?", e1);
-                }
+                handleClose();
             }
             
+            @Override
             public void connectionClosed() {
                 LOG.info("XMPP connection closed. Creating new connection.");
-                try {
-                    persistentXmppConnection(username, password, id);
-                } catch (final IOException e1) {
-                    LOG.error("Could not re-establish connection?", e1);
+                handleClose();
+            }
+            
+            private void handleClose() {
+                if (clientListener != null) {
+                    clientListener.handleClose();
                 }
             }
         });

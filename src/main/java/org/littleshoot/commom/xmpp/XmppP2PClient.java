@@ -12,4 +12,8 @@ public interface XmppP2PClient extends P2PClient {
     XMPPConnection getXmppConnection();
     
     void addMessageListener(MessageListener ml);
+    
+    boolean isLoggedOut();
+
+    void handleClose();
 }
