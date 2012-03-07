@@ -333,10 +333,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final Runnable runner = new Runnable() {
             @Override
             public void run() {
-                final InetSocketAddress isa = 
-                    (InetSocketAddress) sock.getRemoteSocketAddress();
                 final P2PConnectionEvent event = 
-                    new P2PConnectionEvent(jid, isa, incoming, connected);
+                    new P2PConnectionEvent(jid, sock, incoming, connected);
                 synchronized (listeners) {
                     for (final P2PConnectionListener listener : listeners) {
                         listener.onConnectivityEvent(event);
