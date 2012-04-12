@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.SocketFactory;
+import javax.security.auth.login.CredentialException;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
@@ -369,13 +370,13 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     @Override
     public String login(final String user, final String pass) 
-        throws IOException {
+        throws IOException, CredentialException {
         return login(user, pass, "SHOOT-");
     }
     
     @Override
     public String login(final String user, final String pass,
-        final String id) throws IOException {
+        final String id) throws IOException, CredentialException {
         if (this.connecting.get()) {
             throw new IOException("Already attempting connection");
         }
@@ -1031,6 +1032,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             login (this.username, this.password, this.connectionId);
         } catch (final IOException e) {
             log.info("Could not connect!!");
+        } catch (final CredentialException e) {
+            log.info("Credentials are wrong!", e);
         }
     }
 }

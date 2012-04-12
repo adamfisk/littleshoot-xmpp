@@ -12,9 +12,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.net.SocketFactory;
+import javax.security.auth.login.CredentialException;
 import javax.xml.xpath.XPathExpressionException;
 
-import org.apache.commons.io.IOExceptionWithCause;
 import org.apache.commons.lang.StringUtils;
 import org.jivesoftware.smack.ConnectionConfiguration;
 import org.jivesoftware.smack.ConnectionListener;
@@ -214,13 +214,14 @@ public class XmppUtils {
         new ConcurrentHashMap<String, XMPPConnection>();
 
     static XMPPConnection persistentXmppConnection(final String username, 
-            final String password, final String id) throws IOException {
+            final String password, final String id) throws IOException, 
+            CredentialException {
         return persistentXmppConnection(username, password, id, 4);
     }
     
     public static XMPPConnection persistentXmppConnection(final String username, 
         final String password, final String id, final int attempts) 
-        throws IOException {
+        throws IOException, CredentialException {
         return persistentXmppConnection(username, password, id, attempts, 
             "talk.google.com", 5222, "gmail.com", null);
     }
@@ -229,7 +230,7 @@ public class XmppUtils {
         final String password, final String id, final int attempts,
         final String host, final int port, final String serviceName,
         final XmppP2PClient clientListener) 
-            throws IOException {
+            throws IOException, CredentialException {
         final String key = username+password;
         if (xmppConnections.containsKey(key)) {
             final XMPPConnection conn = xmppConnections.get(key);
@@ -258,7 +259,7 @@ public class XmppUtils {
                 final String msg = "Error creating XMPP connection";
                 LOG.error(msg, e);
                 exc = e;    
-            }
+            } 
             
             // Gradual backoff.
             try {
@@ -283,12 +284,12 @@ public class XmppUtils {
     private static XMPPConnection singleXmppConnection(final String username, 
         final String password, final String id, final String xmppServerHost, 
         final int xmppServerPort, final String xmppServiceName, 
-        final XmppP2PClient clientListener) throws XMPPException, IOException {
+        final XmppP2PClient clientListener) throws XMPPException, IOException, 
+        CredentialException {
         
-        final InetAddress host = getHost(xmppServerHost);
-        System.out.println("Connecting to "+host+" port "+xmppServerPort+" service "+xmppServiceName);
+        final InetAddress server = getHost(xmppServerHost);
         final ConnectionConfiguration config = 
-            new ConnectionConfiguration(host.getHostAddress(), 
+            new ConnectionConfiguration(server.getHostAddress(), 
                 xmppServerPort, xmppServiceName);
         config.setExpiredCertificatesCheckEnabled(true);
         config.setNotMatchingDomainCheckEnabled(true);
@@ -348,7 +349,7 @@ public class XmppUtils {
     private static XMPPConnection newConnection(final String username, 
         final String password, final ConnectionConfiguration config,
         final String id, final XmppP2PClient clientListener) 
-        throws IOException, XMPPException {
+        throws XMPPException, CredentialException {
         final XMPPConnection conn = new XMPPConnection(config);
         conn.connect();
         
@@ -358,7 +359,7 @@ public class XmppUtils {
             conn.login(username, password, id);
         } catch (final XMPPException e) {
             LOG.info("Credentials error!", e);
-            throw new IOExceptionWithCause("Authentication error", e);
+            throw new CredentialException("Authentication error");
         }
         
         while (!conn.isAuthenticated()) {
