@@ -1,5 +1,6 @@
 package org.littleshoot.commom.xmpp;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -43,6 +44,7 @@ import org.xml.sax.SAXException;
 public class XmppUtils {
     
     private static final Logger LOG = LoggerFactory.getLogger(XmppUtils.class);
+    private static ConnectionConfiguration globalConfig;
     
     private XmppUtils() {}
     
@@ -281,6 +283,10 @@ public class XmppUtils {
             XmppConfig.isUseDnsSec());
     }
     
+    public static void setGlobalConfig(final ConnectionConfiguration config) {
+        XmppUtils.globalConfig = config;
+    }
+    
     private static XMPPConnection singleXmppConnection(final String username, 
         final String password, final String id, final String xmppServerHost, 
         final int xmppServerPort, final String xmppServiceName, 
@@ -288,6 +294,18 @@ public class XmppUtils {
         CredentialException {
         
         final InetAddress server = getHost(xmppServerHost);
+        final ConnectionConfiguration config;
+        if (XmppUtils.globalConfig != null) {
+            config = XmppUtils.globalConfig;
+        } else {
+            config = newConfig(server, xmppServerPort, xmppServiceName);
+        }
+        
+        return newConnection(username, password, config, id, clientListener);
+    }
+
+    private static ConnectionConfiguration newConfig(final InetAddress server,
+        final int xmppServerPort, final String xmppServiceName) {
         final ConnectionConfiguration config = 
             new ConnectionConfiguration(server.getHostAddress(), 
                 xmppServerPort, xmppServiceName);
@@ -306,6 +324,12 @@ public class XmppUtils {
         // doesn't support by default.
         //config.setVerifyRootCAEnabled(true);
         config.setSelfSignedCertificateEnabled(false);
+        /*
+        final String path = new File(new File(System.getProperty("user.home"), 
+            ".lantern"), "lantern_truststore.jks").getAbsolutePath();
+        
+        config.setTruststorePath(path);
+        */
         
         config.setSocketFactory(new SocketFactory() {
             
@@ -342,8 +366,7 @@ public class XmppUtils {
                 return createSocket(InetAddress.getByName(host), port);
             }
         });
-        
-        return newConnection(username, password, config, id, clientListener);
+        return config;
     }
 
     private static XMPPConnection newConnection(final String username, 
