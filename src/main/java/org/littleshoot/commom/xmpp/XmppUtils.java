@@ -1,6 +1,5 @@
 package org.littleshoot.commom.xmpp;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -10,7 +9,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.net.SocketFactory;
 import javax.security.auth.login.CredentialException;
@@ -287,6 +294,18 @@ public class XmppUtils {
         XmppUtils.globalConfig = config;
     }
     
+    private static ExecutorService connectors = Executors.newCachedThreadPool(
+        new ThreadFactory() {
+            private int count = 0;
+            @Override
+            public Thread newThread(Runnable r) {
+                final Thread t = new Thread(r, "XMPP-Connecting-Thread-"+count);
+                t.setDaemon(true);
+                count++;
+                return t;
+            }
+        });
+    
     private static XMPPConnection singleXmppConnection(final String username, 
         final String password, final String id, final String xmppServerHost, 
         final int xmppServerPort, final String xmppServiceName, 
@@ -301,7 +320,31 @@ public class XmppUtils {
             config = newConfig(server, xmppServerPort, xmppServiceName);
         }
         
-        return newConnection(username, password, config, id, clientListener);
+        final Future<XMPPConnection> fut = 
+            connectors.submit(new Callable<XMPPConnection>() {
+            @Override
+            public XMPPConnection call() throws Exception {
+                return newConnection(username, password, config, id, clientListener);
+            }
+        });
+        try {
+            return fut.get(40, TimeUnit.SECONDS);
+        } catch (final InterruptedException e) {
+            throw new IOException("Interrupted during login!!", e);
+        } catch (final ExecutionException e) {
+            final Throwable t = e.getCause();
+            if (t instanceof XMPPException) {
+                throw (XMPPException)t;
+            } else if (t instanceof IOException) {
+                throw (IOException)t;
+            } else if (t instanceof CredentialException) {
+                throw (CredentialException)t;
+            } else {
+                throw new IllegalStateException ("Unrecognized cause", t);
+            }
+        } catch (final TimeoutException e) {
+            throw new IOException("Took too long to login!!", e);
+        }
     }
 
     private static ConnectionConfiguration newConfig(final InetAddress server,
@@ -381,6 +424,20 @@ public class XmppUtils {
         try {
             conn.login(username, password, id);
         } catch (final XMPPException e) {
+            final String msg = e.getMessage();
+            if (msg != null && msg.contains("No response from the server")) {
+                conn.disconnect();
+                
+                // If the server just didn't respond, sleep for a sec and try
+                // again.
+                try {
+                    Thread.sleep(800);
+                } catch (final InterruptedException e1) {
+                    LOG.error("Exception during sleep?", e1);
+                }
+                return newConnection(username, password, config, id, 
+                    clientListener);
+            }
             LOG.info("Credentials error!", e);
             throw new CredentialException("Authentication error");
         }
@@ -388,7 +445,7 @@ public class XmppUtils {
         while (!conn.isAuthenticated()) {
             LOG.info("Waiting for authentication");
             try {
-                Thread.sleep(200);
+                Thread.sleep(80);
             } catch (final InterruptedException e1) {
                 LOG.error("Exception during sleep?", e1);
             }
