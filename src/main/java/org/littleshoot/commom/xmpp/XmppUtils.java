@@ -158,8 +158,8 @@ public class XmppUtils {
 
     private static String extractXmppProperty(final Document doc, 
         final String name) {
-        final String xml = XmlUtils.toString(doc);
-        LOG.info("Got an XMPP message: {}", xml);
+        //final String xml = XmlUtils.toString(doc);
+        //LOG.info("Got an XMPP message: {}", xml);
         final XPathUtils xpath = XPathUtils.newXPath(doc);
         final String str = 
             "/message/properties/property[name='"+name+"']/value";
