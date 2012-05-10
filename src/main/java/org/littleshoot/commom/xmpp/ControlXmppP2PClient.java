@@ -839,7 +839,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     
         @Override
         public void onTcpSocket(final Socket sock) {
-            log.info("Got a TCP socket!");
+            log.info("Got a TCP socket: {}", sock);
             onSocket(sock);
         }
     
