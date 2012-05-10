@@ -311,7 +311,6 @@ public class XmppUtils {
         final int xmppServerPort, final String xmppServiceName, 
         final XmppP2PClient clientListener) throws XMPPException, IOException, 
         CredentialException {
-        
         final InetAddress server = getHost(xmppServerHost);
         final ConnectionConfiguration config;
         if (XmppUtils.globalConfig != null) {
@@ -416,41 +415,9 @@ public class XmppUtils {
         final String password, final ConnectionConfiguration config,
         final String id, final XmppP2PClient clientListener) 
         throws XMPPException, CredentialException {
+        
         final XMPPConnection conn = new XMPPConnection(config);
         conn.connect();
-        
-        LOG.info("Connection is Secure: {}", conn.isSecureConnection());
-        LOG.info("Connection is TLS: {}", conn.isUsingTLS());
-        try {
-            conn.login(username, password, id);
-        } catch (final XMPPException e) {
-            final String msg = e.getMessage();
-            if (msg != null && msg.contains("No response from the server")) {
-                conn.disconnect();
-                
-                // If the server just didn't respond, sleep for a sec and try
-                // again.
-                try {
-                    Thread.sleep(800);
-                } catch (final InterruptedException e1) {
-                    LOG.error("Exception during sleep?", e1);
-                }
-                return newConnection(username, password, config, id, 
-                    clientListener);
-            }
-            LOG.info("Credentials error!", e);
-            throw new CredentialException("Authentication error");
-        }
-        
-        while (!conn.isAuthenticated()) {
-            LOG.info("Waiting for authentication");
-            try {
-                Thread.sleep(80);
-            } catch (final InterruptedException e1) {
-                LOG.error("Exception during sleep?", e1);
-            }
-        }
-        
         conn.addConnectionListener(new ConnectionListener() {
             
             @Override
@@ -486,6 +453,32 @@ public class XmppUtils {
                 }
             }
         });
+        
+        LOG.info("Connection is Secure: {}", conn.isSecureConnection());
+        LOG.info("Connection is TLS: {}", conn.isUsingTLS());
+
+        try {
+            conn.login(username, password, id);
+        } catch (final XMPPException e) {
+            conn.disconnect();
+            final String msg = e.getMessage();
+            if (msg != null && msg.contains("No response from the server")) {
+                // This isn't necessarily a credentials issue -- try to catch
+                // not credentials issues whenever we can.
+                throw e;
+            }
+            LOG.info("Credentials error!", e);
+            throw new CredentialException("Authentication error");
+        }
+        
+        while (!conn.isAuthenticated()) {
+            LOG.info("Waiting for authentication");
+            try {
+                Thread.sleep(80);
+            } catch (final InterruptedException e1) {
+                LOG.error("Exception during sleep?", e1);
+            }
+        }
         
         return conn;
     }
