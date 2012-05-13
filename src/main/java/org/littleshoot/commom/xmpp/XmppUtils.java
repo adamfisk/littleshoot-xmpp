@@ -47,6 +47,7 @@ import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
+import org.xmlpull.v1.XmlPullParser;
 
 public class XmppUtils {
     
@@ -56,10 +57,18 @@ public class XmppUtils {
     private XmppUtils() {}
     
     static {
+        //ProviderManager.getInstance().addIQProvider(
+        //    "query", "google:shared-status", new GenericIQProvider());
+        
         ProviderManager.getInstance().addIQProvider(
-            "query", "google:shared-status", new GenericIQProvider());
-        ProviderManager.getInstance().addIQProvider(
-            "query", "google:shared-status", new GenericIQProvider());
+                "query", "google:shared-status", new GenericIQProvider() {
+                    
+                    @Override
+                    public IQ parseIQ(final XmlPullParser parser) throws Exception {
+                        //System.out.println("GOT PULL PARSER: "+parser);
+                        return super.parseIQ(parser);
+                    }
+                });
         ProviderManager.getInstance().addIQProvider(
             "query", "google:nosave", new GenericIQProvider());
         ProviderManager.getInstance().addIQProvider(
@@ -67,16 +76,27 @@ public class XmppUtils {
             new GenericIQProvider());
         ProviderManager.getInstance().addIQProvider(
             "query", "google:jingleinfo", new GenericIQProvider());
-        
         ProviderManager.getInstance().addIQProvider(
-            "query", "google:roster", new GenericIQProvider());
+            "query", "jabber:iq:roster", new GenericIQProvider() {
+                
+                @Override
+                public IQ parseIQ(final XmlPullParser parser) throws Exception {
+                    System.out.println("GOT PULL PARSER: "+parser);
+                    return super.parseIQ(parser);
+                }
+            });
         
+
+        
+        
+        /*
         ProviderManager.getInstance().addIQProvider(
             "item", "gr:t", new GenericIQProvider());
         ProviderManager.getInstance().addIQProvider(
                 "item", "gr:mc", new GenericIQProvider());
         ProviderManager.getInstance().addIQProvider(
                 "item", "gr:mc", new GenericIQProvider());
+                */
     }
 
     /**
@@ -311,6 +331,7 @@ public class XmppUtils {
         final int xmppServerPort, final String xmppServiceName, 
         final XmppP2PClient clientListener) throws XMPPException, IOException, 
         CredentialException {
+        
         final InetAddress server = getHost(xmppServerHost);
         final ConnectionConfiguration config;
         if (XmppUtils.globalConfig != null) {

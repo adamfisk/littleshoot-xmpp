@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.SocketFactory;
+import javax.net.ssl.SSLSocket;
 import javax.security.auth.login.CredentialException;
 
 import org.apache.commons.codec.binary.Base64;
@@ -244,7 +245,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         
         log.info("Trying to create new socket...raw="+raw);
         final Socket sock = tcpUdpSocket.newSocket(uri);
-        if (raw) {
+        if (raw || sock instanceof SSLSocket) {
             log.info("Returning raw socket");
             return sock;
         }
