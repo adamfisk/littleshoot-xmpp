@@ -224,7 +224,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         
         final Socket control = controlSocket(uri, streamDesc);
         
-        if (streamDesc.isTcp() && urisToMappedServers.containsKey(uri)) {
+        
+        if (streamDesc.isTcp() && urisToMappedServers.containsKey(uri) &&
+            (control instanceof SSLSocket)) {
             log.info("USING MAPPED PORT SERVER AFTER CONTROL!");
             // No reason to keep the control socket around if we have the
             // mapped port. Note we do go through with creating the control in
@@ -295,7 +297,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 if (!control.isClosed()) {
                     return control;
                 }
-                
+                log.info("Establishing new control socket");
                 final Socket newControl = 
                     establishControlSocket(uri, streamDesc);
                 return newControl;
@@ -359,10 +361,23 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         log.info("Created control socket!!");
         final byte[] writeKey = tcpUdpSocket.getWriteKey();
         final byte[] readKey = tcpUdpSocket.getReadKey();
-        log.info("Creating new CipherSocket with write key {} and read key {}", 
-            writeKey, readKey);
         
-        final Socket cs =  new CipherSocket(sock, writeKey, readKey);
+        final Socket cs;
+        if (sock instanceof SSLSocket) {
+            log.info("Control socket is an SSL socket -- not using cipher socket");
+            cs = sock;
+        } else {
+            log.info("Control socket is a UDP cipher socket");
+            log.info("Creating new CipherSocket with write key {} and read key {}", 
+                    writeKey, readKey);
+            cs =  new CipherSocket(sock, writeKey, readKey);
+            
+            // It's rare that UDP sockets will resolve faster than TCP
+            // sockets -- more likely there was some error creating the
+            // TCP socket, so we should remove the mapped server URI --
+            // there was likely in fact a problem with the mapping.
+            this.urisToMappedServers.remove(uri);
+        }
         
         notifyConnectionListeners(uri, cs, false, true);
         this.outgoingControlSockets.put(uri, cs);
@@ -513,8 +528,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final byte[] answer = offerAnswer.generateAnswer();
         final long tid = (Long) msg.getProperty(P2PConstants.TRANSACTION_ID);
         
-        // TODO: This is a throwaway key here since the control socket is not
-        // encrypted as of this writing.
         final Message inviteOk = newInviteOk(tid, answer, writeKey);
         final String to = msg.getFrom();
         inviteOk.setTo(to);
@@ -736,12 +749,16 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                         writeToControlSocket(xml);
                     } catch (final IOException ioe) {
                         log.warn("Still could not establish or write to " +
-                            "new control socket", ioe);
+                            "new control socket -- try " +
+                            "-Djavax.net.debug=ssl:record or " +
+                            "System.setProperty(\"javax.net.debug\", \"ssl:record\");", ioe);
                         closeOutgoing(uri, control);
                         return;
                     } catch (final NoAnswerException nae) {
                         log.warn("Still could not establish or write to " +
-                            "new control socket", nae);
+                            "new control socket -- try " +
+                            "-Djavax.net.debug=ssl:record or " +
+                            "System.setProperty(\"javax.net.debug\", \"ssl:record\");", nae);
                         closeOutgoing(uri, control);
                         return;
                     }
