@@ -481,7 +481,7 @@ public class XmppUtils {
         try {
             conn.login(username, password, id);
         } catch (final XMPPException e) {
-            conn.disconnect();
+            //conn.disconnect();
             final String msg = e.getMessage();
             if (msg != null && msg.contains("No response from the server")) {
                 // This isn't necessarily a credentials issue -- try to catch
