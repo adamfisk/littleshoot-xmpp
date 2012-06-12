@@ -20,8 +20,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import javax.security.auth.login.CredentialException;
 
 import org.apache.commons.codec.binary.Base64;
@@ -50,7 +50,6 @@ import org.lastbamboo.common.p2p.P2PConnectionEvent;
 import org.lastbamboo.common.p2p.P2PConnectionListener;
 import org.lastbamboo.common.p2p.P2PConstants;
 import org.littleshoot.mina.common.ByteBuffer;
-import org.littleshoot.util.CipherSocket;
 import org.littleshoot.util.CommonUtils;
 import org.littleshoot.util.KeyStorage;
 import org.littleshoot.util.PublicIp;
@@ -75,7 +74,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private static final Map<String, Socket> incomingControlSockets = 
         new ConcurrentHashMap<String, Socket>();
 
-    private static final int TIMEOUT = 8 * 60 * 1000;
+    private static final int TIMEOUT = 60 * 60 * 1000;
 
     private final OfferAnswerFactory offerAnswerFactory;
 
@@ -114,7 +113,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private final int xmppServerPort;
 
-    private final SocketFactory socketFactory;
+    private final SSLSocketFactory socketFactory;
 
     private AtomicBoolean loggedOut = new AtomicBoolean(false);
 
@@ -123,7 +122,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final OfferAnswerFactory factory,
         final InetSocketAddress plainTextRelayAddress, 
         final SessionSocketListener callSocketListener, final int relayWait,
-        final PublicIp publicIp, final SocketFactory socketFactory) {
+        final PublicIp publicIp, final SSLSocketFactory socketFactory) {
         return new ControlXmppP2PClient(factory, plainTextRelayAddress, 
             //callSocketListener, relayWait, "talk.google.com", 5222, "talk.google.com",
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", 
@@ -147,7 +146,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final SessionSocketListener callSocketListener,
         final int relayWaitTime, final String host, final int port, 
         final String serviceName, final boolean useRelay,
-        final PublicIp publicIp, final SocketFactory socketFactory) {
+        final PublicIp publicIp, final SSLSocketFactory socketFactory) {
         this.offerAnswerFactory = offerAnswerFactory;
         this.plainTextRelayAddress = plainTextRelayAddress;
         this.callSocketListener = callSocketListener;
@@ -247,6 +246,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         
         log.info("Trying to create new socket...raw="+raw);
         final Socket sock = tcpUdpSocket.newSocket(uri);
+        return sock;
+        /*
         if (raw || sock instanceof SSLSocket) {
             log.info("Returning raw socket");
             return sock;
@@ -256,6 +257,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         log.info("Creating new CipherSocket with write key {} and read key {}", 
             writeKey, readKey);
         return new CipherSocket(sock, writeKey, readKey);
+        */
     }
     
     private Socket newMappedServerSocket(final URI uri, final boolean raw) 
@@ -358,7 +360,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         
         final Socket sock = tcpUdpSocket.newSocket(uri);
         sock.setSoTimeout(TIMEOUT);
-        log.info("Created control socket!!");
+        log.info("Created control socket: {}", sock);
+        
+        /*
         final byte[] writeKey = tcpUdpSocket.getWriteKey();
         final byte[] readKey = tcpUdpSocket.getReadKey();
         
@@ -378,10 +382,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             // there was likely in fact a problem with the mapping.
             this.urisToMappedServers.remove(uri);
         }
+        */
         
-        notifyConnectionListeners(uri, cs, false, true);
-        this.outgoingControlSockets.put(uri, cs);
-        return cs;
+        notifyConnectionListeners(uri, sock, false, true);
+        this.outgoingControlSockets.put(uri, sock);
+        return sock;
     }
 
     @Override
@@ -858,7 +863,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         @Override
         public void onTcpSocket(final Socket sock) {
             log.info("Got a TCP socket: {}", sock);
-            onSocket(sock);
+            onControlSocket(sock);
         }
     
         @Override
@@ -866,10 +871,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             log.info("Got a UDP socket: {}", sock);
             log.info("Creating new CipherSocket with write key {} and read key {}", 
                     writeKey, readKey);
-            onSocket(new CipherSocket(sock, writeKey, readKey));
+            //onSocket(new CipherSocket(sock, writeKey, readKey));
+
+            onControlSocket(sock);
         }
     
-        private void onSocket(final Socket sock) {
+        private void onControlSocket(final Socket sock) {
             log.info("Got control socket on 'server' side: {}", sock);
             // We use one control socket for sending offers and another one
             // for receiving offers. This is an incoming socket for 
