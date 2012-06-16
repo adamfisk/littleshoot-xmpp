@@ -153,9 +153,9 @@ public class XmppUtils {
         return extractXmppProperty(doc, P2PConstants.SDP);
     }
 
-    public static String extractKey(final Document doc) {
-        return extractXmppProperty(doc, P2PConstants.SECRET_KEY);
-    }
+    //public static String extractKey(final Document doc) {
+    //    return extractXmppProperty(doc, P2PConstants.SECRET_KEY);
+    //}
     
 
     public static long extractTransactionId(final Document doc) {

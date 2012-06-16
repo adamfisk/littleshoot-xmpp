@@ -97,8 +97,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private final ExecutorService inviteProcessingExecutor = 
         Executors.newCachedThreadPool();
     
-    private final Map<URI, Socket> outgoingControlSockets = 
-        new ConcurrentHashMap<URI, Socket>();
+    private final Map<URI, SSLSocket> outgoingControlSockets = 
+        new ConcurrentHashMap<URI, SSLSocket>();
 
     private final boolean useRelay;
     
@@ -221,7 +221,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             return newMappedServerSocket(uri, raw);
         }
         
-        final Socket control = controlSocket(uri, streamDesc);
+        final SSLSocket control = controlSocket(uri, streamDesc);
         
         
         if (streamDesc.isTcp() && urisToMappedServers.containsKey(uri) &&
@@ -281,7 +281,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
     }
 
-    private Socket controlSocket(final URI uri, 
+    private SSLSocket controlSocket(final URI uri, 
         final IceMediaStreamDesc streamDesc) throws IOException, 
         NoAnswerException {
         // We want to synchronized on the control sockets and block new 
@@ -291,16 +291,16 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         synchronized (this.outgoingControlSockets) {
             if (!this.outgoingControlSockets.containsKey(uri)) {
                 log.info("Creating new control socket");
-                final Socket control = establishControlSocket(uri, streamDesc);
+                final SSLSocket control = establishControlSocket(uri, streamDesc);
                 return control;
             } else {
                 log.info("Using existing control socket");
-                final Socket control = this.outgoingControlSockets.get(uri);
+                final SSLSocket control = this.outgoingControlSockets.get(uri);
                 if (!control.isClosed()) {
                     return control;
                 }
                 log.info("Establishing new control socket");
-                final Socket newControl = 
+                final SSLSocket newControl = 
                     establishControlSocket(uri, streamDesc);
                 return newControl;
             }
@@ -351,14 +351,16 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         exec.execute(runner);
     }
 
-    private Socket establishControlSocket(final URI uri, 
+    private SSLSocket establishControlSocket(final URI uri, 
         final IceMediaStreamDesc streamDesc) throws IOException, 
         NoAnswerException {
         final DefaultTcpUdpSocket tcpUdpSocket = 
             new DefaultTcpUdpSocket(this, this.offerAnswerFactory,
                 this.relayWaitTime, 30 * 1000, streamDesc);
         
-        final Socket sock = tcpUdpSocket.newSocket(uri);
+        final Socket rawSock = tcpUdpSocket.newSocket(uri);
+        log.info("Raw sock class: {}", rawSock.getClass());
+        final SSLSocket sock = (SSLSocket) rawSock;
         sock.setSoTimeout(TIMEOUT);
         log.info("Created control socket: {}", sock);
         
@@ -386,7 +388,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         
         notifyConnectionListeners(uri, sock, false, true);
         this.outgoingControlSockets.put(uri, sock);
-        return sock;
+        return (SSLSocket) sock;
     }
 
     @Override
@@ -449,8 +451,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         msg.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE);
         msg.setProperty(P2PConstants.SDP, base64Sdp);
         msg.setProperty(P2PConstants.CONTROL, "true");
-        msg.setProperty(P2PConstants.SECRET_KEY, 
-            Base64.encodeBase64String(keyStorage.getWriteKey()));
+        //msg.setProperty(P2PConstants.SECRET_KEY, 
+        //    Base64.encodeBase64String(keyStorage.getWriteKey()));
         return msg;
     }
     
@@ -507,10 +509,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
      * the control socket.
      */
     private void processInviteToEstablishControlSocket(final Message msg) {
-        final String readString = 
-            (String) msg.getProperty(P2PConstants.SECRET_KEY);
-        final byte[] readKey = Base64.decodeBase64(readString);
-        final byte[] writeKey = CommonUtils.generateKey();
+        //final String readString = 
+        //    (String) msg.getProperty(P2PConstants.SECRET_KEY);
+        //final byte[] readKey = Base64.decodeBase64(readString);
+        //final byte[] writeKey = CommonUtils.generateKey();
         final String sdp = (String) msg.getProperty(P2PConstants.SDP);
         final ByteBuffer offer = ByteBuffer.wrap(Base64.decodeBase64(sdp));
         final String offerString = MinaUtils.toAsciiString(offer);
@@ -519,7 +521,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final OfferAnswer offerAnswer;
         try {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
-                new ControlSocketOfferAnswerListener(msg.getFrom(), readKey, writeKey), false);
+                new ControlSocketOfferAnswerListener(msg.getFrom()), false);
         }
         catch (final OfferAnswerConnectException e) {
             // This indicates we could not establish the necessary connections 
@@ -533,7 +535,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final byte[] answer = offerAnswer.generateAnswer();
         final long tid = (Long) msg.getProperty(P2PConstants.TRANSACTION_ID);
         
-        final Message inviteOk = newInviteOk(tid, answer, writeKey);
+        final Message inviteOk = newInviteOk(tid, answer);
         final String to = msg.getFrom();
         inviteOk.setTo(to);
         log.info("Sending CONTROL INVITE OK to {}", inviteOk.getTo());
@@ -544,8 +546,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         log.debug("Done processing CONTROL XMPP INVITE!!!");
     }
     
-    private Message newInviteOk(final Long tid, final byte[] answer, 
-        final byte[] answerKey) {
+    private Message newInviteOk(final Long tid, final byte[] answer) {
         final Message inviteOk = new Message();
         if (tid != null) {
             inviteOk.setProperty(P2PConstants.TRANSACTION_ID, tid.longValue());
@@ -553,8 +554,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         inviteOk.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE_OK);
         inviteOk.setProperty(P2PConstants.SDP, 
             Base64.encodeBase64String(answer));
-        inviteOk.setProperty(P2PConstants.SECRET_KEY, 
-            Base64.encodeBase64String(answerKey));
         
         if (this.offerAnswerFactory.isAnswererPortMapped()) {
             inviteOk.setProperty(P2PConstants.MAPPED_PORT, 
@@ -658,9 +657,9 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             final TransactionData td) {
             final byte[] body = CommonUtils.decodeBase64(
                 (String) msg.getProperty(P2PConstants.SDP));
-            final byte[] key = CommonUtils.decodeBase64(
-                (String) msg.getProperty(P2PConstants.SECRET_KEY));
-            td.keyStorage.setReadKey(key);
+            //final byte[] key = CommonUtils.decodeBase64(
+            //    (String) msg.getProperty(P2PConstants.SECRET_KEY));
+            //td.keyStorage.setReadKey(key);
             return new OfferAnswerMessage() {
                 @Override
                 public String getTransactionKey() {
@@ -717,10 +716,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
      */
     private class OffererOverControlSocket implements Offerer {
 
-        private Socket control;
+        private SSLSocket control;
         private final IceMediaStreamDesc streamDesc;
 
-        private OffererOverControlSocket(final Socket control, 
+        private OffererOverControlSocket(final SSLSocket control, 
             final IceMediaStreamDesc streamDesc) {
             this.control = control;
             this.streamDesc = streamDesc;
@@ -792,12 +791,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                         }
                     };
                     final String from = XmppUtils.extractFrom(doc);
-                    final String encodedKey = XmppUtils.extractKey(doc);
-                    final byte[] key = CommonUtils.decodeBase64(encodedKey);
-                    keyStore.setReadKey(key);
+                    //final String encodedKey = XmppUtils.extractKey(doc);
+                    //final byte[] key = CommonUtils.decodeBase64(encodedKey);
+                    //keyStore.setReadKey(key);
                     //final Long tid = XmppUtils.extractTransactionId(doc);
-                    log.info("Got INVITE OK establishing new socket over " +
-                        "control socket...from: "+from+" read key: "+key);
+                    //log.info("Got INVITE OK establishing new socket over " +
+                    //    "control socket...from: "+from+" read key: "+key);
                     
                     log.info("Calling transaction succeeded on listener: {}", 
                         transactionListener);
@@ -825,8 +824,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             msg.setProperty(P2PConstants.CONTROL, "true");
             final byte[] writeKey = keyStorage.getWriteKey();
             log.info("Setting client write key to: {}", writeKey);
-            msg.setProperty(P2PConstants.SECRET_KEY, 
-                Base64.encodeBase64String(writeKey));
+            //msg.setProperty(P2PConstants.SECRET_KEY, 
+            //    Base64.encodeBase64String(writeKey));
             return msg;
         }
         
@@ -842,13 +841,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         implements OfferAnswerListener {
     
         private final String fullJid;
-        private final byte[] readKey;
-        private final byte[] writeKey;
+        //private final byte[] readKey;
+        //private final byte[] writeKey;
     
-        public ControlSocketOfferAnswerListener(final String fullJid, 
-            final byte[] readKey, final byte[] writeKey) {
-            this.readKey = readKey;
-            this.writeKey = writeKey;
+        public ControlSocketOfferAnswerListener(final String fullJid) {
+            //this.readKey = readKey;
+            //this.writeKey = writeKey;
             log.info("Creating listener on answerwer with full JID: {}", 
                 fullJid);
             this.fullJid = fullJid;
@@ -869,8 +867,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         @Override
         public void onUdpSocket(final Socket sock) {
             log.info("Got a UDP socket: {}", sock);
-            log.info("Creating new CipherSocket with write key {} and read key {}", 
-                    writeKey, readKey);
+            //log.info("Creating new CipherSocket with write key {} and read key {}", 
+            //        writeKey, readKey);
             //onSocket(new CipherSocket(sock, writeKey, readKey));
 
             onControlSocket(sock);
@@ -915,11 +913,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 
                 final String sdp = XmppUtils.extractSdp(doc);
                 final String from = XmppUtils.extractFrom(doc);
-                final String key = XmppUtils.extractKey(doc);
+                //final String key = XmppUtils.extractKey(doc);
                 
                 final ByteBuffer offer = 
                     ByteBuffer.wrap(Base64.decodeBase64(sdp));
-                processInviteOverControlSocket(offer, sock, key, from);
+                processInviteOverControlSocket(offer, sock, from);
             }
         }
     }
@@ -939,24 +937,20 @@ public class ControlXmppP2PClient implements XmppP2PClient {
      */
     private void processInviteOverControlSocket(
         final ByteBuffer offer, final Socket controlSocket, 
-        final String readKey, final String from) throws IOException {
+        final String from) throws IOException {
         log.info("Processing offer...");
-        if (StringUtils.isBlank(readKey)) {
-            log.error("Null key?");
-            throw new NullPointerException("Null key for new secure socket!!");
-        }
         final String offerString = MinaUtils.toAsciiString(offer);
         
-        final byte[] answerKey = CommonUtils.generateKey();
+        //final byte[] answerKey = CommonUtils.generateKey();
         final OfferAnswer offerAnswer;
-        final byte[] key = CommonUtils.decodeBase64(readKey);
-        log.info("Read key from client INVITE -- our read key: {}", key);
+        //final byte[] key = CommonUtils.decodeBase64(readKey);
+        //log.info("Read key from client INVITE -- our read key: {}", key);
         
         try {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
                 new AnswererOfferAnswerListener("", 
                     this.plainTextRelayAddress, callSocketListener, 
-                    offerString, answerKey, key), this.useRelay);
+                    offerString), this.useRelay);
         }
         catch (final OfferAnswerConnectException e) {
             // This indicates we could not establish the necessary connections 
@@ -968,7 +962,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         log.info("Creating answer");
         final byte[] answer = offerAnswer.generateAnswer();
         log.info("Creating INVITE OK");
-        final Message inviteOk = newInviteOk(null, answer, answerKey);
+        final Message inviteOk = newInviteOk(null, answer);
         log.info("Writing INVITE OK");
         writeMessage(inviteOk, controlSocket);
         log.info("Wrote INVITE OK");
