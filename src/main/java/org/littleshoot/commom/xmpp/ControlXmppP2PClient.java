@@ -790,7 +790,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                             return ByteBuffer.wrap(sdpBytes);
                         }
                     };
-                    final String from = XmppUtils.extractFrom(doc);
+                    //final String from = XmppUtils.extractFrom(doc);
                     //final String encodedKey = XmppUtils.extractKey(doc);
                     //final byte[] key = CommonUtils.decodeBase64(encodedKey);
                     //keyStore.setReadKey(key);
