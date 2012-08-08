@@ -485,7 +485,7 @@ public class XmppUtils {
             final String msg = e.getMessage();
             if (msg != null && msg.contains("No response from the server")) {
                 // This isn't necessarily a credentials issue -- try to catch
-                // not credentials issues whenever we can.
+                // non-credentials issues whenever we can.
                 throw e;
             }
             LOG.info("Credentials error!", e);
@@ -506,6 +506,10 @@ public class XmppUtils {
     
     public static String jidToUser(final String jid) {
         return StringUtils.substringBefore(jid, "/");
+    }
+    
+    public static String jidToUser(final XMPPConnection conn) {
+        return jidToUser(conn.getUser());
     }
     
     //// The following includes a whole bunch of custom Google Talk XMPP 
