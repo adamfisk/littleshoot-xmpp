@@ -283,8 +283,6 @@ public class XmppUtils {
                     singleXmppConnection(username, password, id, host, port, 
                         serviceName, clientListener);
                 
-                // Make sure we signify gchat support.
-                XmppUtils.getSharedStatus(conn);
                 LOG.info("Created offerer");
                 xmppConnections.put(key, conn);
                 return conn;
@@ -334,6 +332,15 @@ public class XmppUtils {
             }
         });
     
+    
+    public static XMPPConnection simpleGoogleTalkConnection(
+        final String username, final String password, final String id) 
+        throws CredentialException, XMPPException, IOException {
+        
+        return singleXmppConnection(username, password, id, "talk.google.com", 
+            5222, "gmail.com", null);
+    }
+    
     private static XMPPConnection singleXmppConnection(final String username, 
         final String password, final String id, final String xmppServerHost, 
         final int xmppServerPort, final String xmppServiceName, 
@@ -356,7 +363,10 @@ public class XmppUtils {
             }
         });
         try {
-            return fut.get(40, TimeUnit.SECONDS);
+            final XMPPConnection conn = fut.get(40, TimeUnit.SECONDS);
+            // Make sure we signify gchat support.
+            XmppUtils.getSharedStatus(conn);
+            return conn;
         } catch (final InterruptedException e) {
             throw new IOException("Interrupted during login!!", e);
         } catch (final ExecutionException e) {
