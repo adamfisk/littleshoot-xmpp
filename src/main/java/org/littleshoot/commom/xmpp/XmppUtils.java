@@ -318,6 +318,10 @@ public class XmppUtils {
         XmppUtils.globalConfig = config;
     }
     
+    public static ConnectionConfiguration getGlobalConfig() {
+        return XmppUtils.globalConfig;
+    }
+    
     private static ExecutorService connectors = Executors.newCachedThreadPool(
         new ThreadFactory() {
             private int count = 0;
@@ -338,8 +342,8 @@ public class XmppUtils {
         
         final InetAddress server = getHost(xmppServerHost);
         final ConnectionConfiguration config;
-        if (XmppUtils.globalConfig != null) {
-            config = XmppUtils.globalConfig;
+        if (getGlobalConfig() != null) {
+            config = getGlobalConfig();
         } else {
             config = newConfig(server, xmppServerPort, xmppServiceName);
         }
