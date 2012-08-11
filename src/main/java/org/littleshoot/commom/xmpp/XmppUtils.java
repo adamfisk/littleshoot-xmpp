@@ -36,6 +36,7 @@ import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smack.packet.XMPPError;
 import org.jivesoftware.smack.provider.ProviderManager;
+import org.jivesoftware.smackx.provider.VCardProvider;
 import org.lastbamboo.common.p2p.P2PConstants;
 import org.littleshoot.dnssec4j.VerifiedAddressFactory;
 import org.littleshoot.util.xml.XPathUtils;
@@ -57,6 +58,9 @@ public class XmppUtils {
     private XmppUtils() {}
     
     static {
+        
+        ProviderManager.getInstance().addIQProvider("vCard", "vcard-temp",
+                new VCardProvider());
         //ProviderManager.getInstance().addIQProvider(
         //    "query", "google:shared-status", new GenericIQProvider());
         
@@ -458,7 +462,7 @@ public class XmppUtils {
             
             @Override
             public void connectionClosedOnError(final Exception e) {
-                LOG.info("XMPP connection closed on error", e);
+                LOG.warn("XMPP connection closed on error", e);
                 handleClose();
             }
             
