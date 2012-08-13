@@ -36,6 +36,7 @@ import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smack.packet.XMPPError;
 import org.jivesoftware.smack.provider.ProviderManager;
+import org.jivesoftware.smackx.packet.VCard;
 import org.jivesoftware.smackx.provider.VCardProvider;
 import org.lastbamboo.common.p2p.P2PConstants;
 import org.littleshoot.dnssec4j.VerifiedAddressFactory;
@@ -528,6 +529,13 @@ public class XmppUtils {
     
     public static String jidToUser(final XMPPConnection conn) {
         return jidToUser(conn.getUser());
+    }
+    
+    public static VCard getVCard(final XMPPConnection conn, 
+        final String emailId) throws XMPPException {
+        final VCard card = new VCard();
+        card.load(conn, emailId);
+        return card;
     }
     
     //// The following includes a whole bunch of custom Google Talk XMPP 
