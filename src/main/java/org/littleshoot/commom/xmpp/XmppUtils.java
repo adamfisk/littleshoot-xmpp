@@ -25,6 +25,7 @@ import javax.xml.xpath.XPathExpressionException;
 
 import org.apache.commons.lang.StringUtils;
 import org.jivesoftware.smack.ConnectionConfiguration;
+import org.jivesoftware.smack.ConnectionConfiguration.SecurityMode;
 import org.jivesoftware.smack.ConnectionListener;
 import org.jivesoftware.smack.PacketCollector;
 import org.jivesoftware.smack.XMPPConnection;
@@ -34,6 +35,7 @@ import org.jivesoftware.smack.packet.IQ;
 import org.jivesoftware.smack.packet.IQ.Type;
 import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.packet.RosterPacket;
 import org.jivesoftware.smack.packet.XMPPError;
 import org.jivesoftware.smack.provider.ProviderManager;
 import org.jivesoftware.smackx.packet.VCard;
@@ -81,6 +83,7 @@ public class XmppUtils {
             new GenericIQProvider());
         ProviderManager.getInstance().addIQProvider(
             "query", "google:jingleinfo", new GenericIQProvider());
+        /*
         ProviderManager.getInstance().addIQProvider(
             "query", "jabber:iq:roster", new GenericIQProvider() {
                 
@@ -90,18 +93,16 @@ public class XmppUtils {
                     return super.parseIQ(parser);
                 }
             });
-        
-
-        
-        
-        /*
         ProviderManager.getInstance().addIQProvider(
-            "item", "gr:t", new GenericIQProvider());
-        ProviderManager.getInstance().addIQProvider(
-                "item", "gr:mc", new GenericIQProvider());
-        ProviderManager.getInstance().addIQProvider(
-                "item", "gr:mc", new GenericIQProvider());
-                */
+            "query", "google:roster", new GenericIQProvider() {
+                
+                @Override
+                public IQ parseIQ(final XmlPullParser parser) throws Exception {
+                    System.out.println("GOT GOOGLE ROSTER PULL PARSER: "+parser);
+                    return super.parseIQ(parser);
+                }
+            });
+            */
     }
 
     /**
@@ -397,7 +398,7 @@ public class XmppUtils {
         
         config.setCompressionEnabled(true);
         
-        config.setRosterLoadedAtLogin(true);
+        //config.setRosterLoadedAtLogin(true);
         config.setReconnectionAllowed(false);
         
         config.setVerifyChainEnabled(true);
@@ -455,7 +456,8 @@ public class XmppUtils {
         final String password, final ConnectionConfiguration config,
         final String id, final XmppP2PClient clientListener) 
         throws XMPPException, CredentialException {
-        
+        config.setSecurityMode(SecurityMode.required);
+        //config.setSecurityMode(SecurityMode.disabled);
         final XMPPConnection conn = new XMPPConnection(config);
         conn.connect();
         conn.addConnectionListener(new ConnectionListener() {
@@ -572,11 +574,11 @@ public class XmppUtils {
             "<query xmlns='google:shared-status' version='2'/>");
     }
     
-    public static Packet extendedRoster(final XMPPConnection conn) {
+    public static RosterPacket extendedRoster(final XMPPConnection conn) {
         LOG.info("Requesting extended roster");
         final String query =
-            "<query xmlns='jabber:iq:roster' xmlns:gr='google:roster' gr:ext='2'/>";
-        return getGTalkProperty(conn, query);
+            "<query xmlns:gr='google:roster' gr:ext='2' xmlns='jabber:iq:roster'/>";
+        return (RosterPacket) getGTalkProperty(conn, query);
     }
     
     public static Collection<InetSocketAddress> googleStunServers(
