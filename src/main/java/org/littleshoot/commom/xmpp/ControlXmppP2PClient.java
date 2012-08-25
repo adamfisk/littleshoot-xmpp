@@ -1049,6 +1049,16 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
         try {
             login (this.username, this.password, this.connectionId);
+            if (this.callSocketListener != null) {
+                final Thread t = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        callSocketListener.reconnected();
+                    }
+                }, "Reconnected-Listener-Thread");
+                t.setDaemon(true);
+                t.start();
+            }
         } catch (final IOException e) {
             log.info("Could not connect!!");
         } catch (final CredentialException e) {
