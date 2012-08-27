@@ -387,6 +387,11 @@ public class XmppUtils {
         }
     }
 
+    /**
+     * Creates a generic XMPP configuration. Note that in practice callers
+     * will typically include their own global configuration for things
+     * like trust managers, and this method will NOT BE CALLED.
+     */
     private static ConnectionConfiguration newConfig(final InetAddress server,
         final int xmppServerPort, final String xmppServiceName) {
         final ConnectionConfiguration config = 
@@ -402,17 +407,9 @@ public class XmppUtils {
         config.setReconnectionAllowed(false);
         
         config.setVerifyChainEnabled(true);
-        
-        // TODO: Enable this. Google Talk root CA is equifax, which java 
-        // doesn't support by default.
-        //config.setVerifyRootCAEnabled(true);
+
+        config.setVerifyRootCAEnabled(true);
         config.setSelfSignedCertificateEnabled(false);
-        /*
-        final String path = new File(new File(System.getProperty("user.home"), 
-            ".lantern"), "lantern_truststore.jks").getAbsolutePath();
-        
-        config.setTruststorePath(path);
-        */
         
         config.setSocketFactory(new SocketFactory() {
             
