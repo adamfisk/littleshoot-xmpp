@@ -408,7 +408,9 @@ public class XmppUtils {
         
         config.setVerifyChainEnabled(true);
 
-        config.setVerifyRootCAEnabled(true);
+        // This is commented out because the Google Talk signing cert is not
+        // trusted by java by default.
+        //config.setVerifyRootCAEnabled(true);
         config.setSelfSignedCertificateEnabled(false);
         
         config.setSocketFactory(new SocketFactory() {

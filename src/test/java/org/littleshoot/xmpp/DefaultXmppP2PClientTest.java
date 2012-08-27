@@ -40,8 +40,8 @@ public class DefaultXmppP2PClientTest {
             conn.connect();
             //SASLAuthentication.registerSASLMechanism("DIGEST-MD5", MySASLDigestMD5Mechanism.class);
             
-            //conn.login("a@bravenewsoftware.org", "1745t77q", "test");
-            conn.login("a@bravenewsoftware.org@chat.facebook.com", "1745t77q");
+            //conn.login("a@bravenewsoftware.org", "", "test");
+            conn.login("a@bravenewsoftware.org@chat.facebook.com", "");
             
             Thread.sleep(30000);
             */
