@@ -1065,4 +1065,10 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             log.info("Credentials are wrong!", e);
         }
     }
+    
+    @Override 
+    public void stop() {
+        logout();
+        this.xmppConnection.disconnect();
+    }
 }

@@ -16,4 +16,6 @@ public interface XmppP2PClient extends P2PClient {
     boolean isLoggedOut();
 
     void handleClose();
+    
+    void stop();
 }
