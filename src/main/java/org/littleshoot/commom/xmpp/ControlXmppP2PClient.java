@@ -91,11 +91,35 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private final InetSocketAddress plainTextRelayAddress;
     
+    private final String mp = 
+        ControlXmppP2PClient.class.getSimpleName()+"-Message-Processing-";
+
+    private final String ip = 
+        ControlXmppP2PClient.class.getSimpleName()+"-Invite-Processing-";
+    
     private final ExecutorService messageProcessingExecutor = 
-        Executors.newCachedThreadPool();
+        Executors.newCachedThreadPool(new ThreadFactory() {
+            private int count = 0;
+            @Override
+            public Thread newThread(Runnable r) {
+                final Thread t = new Thread(r, mp+count);
+                t.setDaemon(true);
+                count++;
+                return t;
+            }
+        });
     
     private final ExecutorService inviteProcessingExecutor = 
-        Executors.newCachedThreadPool();
+        Executors.newCachedThreadPool(new ThreadFactory() {
+            private int count = 0;
+            @Override
+            public Thread newThread(Runnable r) {
+                final Thread t = new Thread(r, ip+count);
+                t.setDaemon(true);
+                count++;
+                return t;
+            }
+        });
     
     private final Map<URI, SSLSocket> outgoingControlSockets = 
         new ConcurrentHashMap<URI, SSLSocket>();
