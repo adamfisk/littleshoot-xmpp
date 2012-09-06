@@ -20,8 +20,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocket;
-import javax.net.ssl.SSLSocketFactory;
 import javax.security.auth.login.CredentialException;
 
 import org.apache.commons.codec.binary.Base64;
@@ -85,7 +85,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private final int relayWaitTime;
 
-    private final String xmppServiceName;
+    private String xmppServiceName;
 
     private final SessionSocketListener callSocketListener;
 
@@ -133,20 +133,20 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private final PublicIp publicIp;
 
-    private final String xmppServerHost;
+    private String xmppServerHost;
 
-    private final int xmppServerPort;
+    private int xmppServerPort;
 
-    private final SSLSocketFactory socketFactory;
+    private final SocketFactory socketFactory;
 
-    private AtomicBoolean loggedOut = new AtomicBoolean(false);
+    private AtomicBoolean loggedOut = new AtomicBoolean(true);
 
     
     public static ControlXmppP2PClient newGoogleTalkDirectClient(
         final OfferAnswerFactory factory,
         final InetSocketAddress plainTextRelayAddress, 
         final SessionSocketListener callSocketListener, final int relayWait,
-        final PublicIp publicIp, final SSLSocketFactory socketFactory) {
+        final PublicIp publicIp, final SocketFactory socketFactory) {
         return new ControlXmppP2PClient(factory, plainTextRelayAddress, 
             //callSocketListener, relayWait, "talk.google.com", 5222, "talk.google.com",
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", 
@@ -170,7 +170,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         final SessionSocketListener callSocketListener,
         final int relayWaitTime, final String host, final int port, 
         final String serviceName, final boolean useRelay,
-        final PublicIp publicIp, final SSLSocketFactory socketFactory) {
+        final PublicIp publicIp, final SocketFactory socketFactory) {
         this.offerAnswerFactory = offerAnswerFactory;
         this.plainTextRelayAddress = plainTextRelayAddress;
         this.callSocketListener = callSocketListener;
@@ -422,14 +422,44 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
     
     @Override
+    public String login(final String user, final String pass, 
+        final String serverHost, final int serverPort, final String serviceName) 
+        throws IOException, CredentialException {
+        return login(user, pass, serverHost, serverPort, serviceName, "SHOOT-");
+    }
+    
+    @Override
     public String login(final String user, final String pass,
-        final String id) throws IOException, CredentialException {
+        final String id) throws IOException, 
+        CredentialException {
+        return login(user, pass, this.xmppServerHost, this.xmppServerPort, 
+            this.xmppServiceName, id);
+    }
+    
+    
+    @Override
+    public String login(final String user, final String pass, 
+        final String serverHost, final int serverPort, 
+        final String serviceName, final String id) 
+        throws CredentialException, IOException {
         if (this.connecting.get()) {
             throw new IOException("Already attempting connection");
         }
         this.loggedOut.set(false);
         this.username = user;
         this.password = pass;
+        this.xmppServerHost = serverHost;
+        
+        if ("talk.google.com".equals(this.xmppServerHost)) {
+            this.xmppServerPort = 5222;
+            this.xmppServiceName = "gmail.com";
+            if (!user.contains("@")) {
+                this.username = user + "@gmail.com";
+            }
+        } else {
+            this.xmppServerPort = serverPort;
+            this.xmppServiceName = serviceName;
+        }
         this.connectionId = id;
         final int att = this.connectionAttempts.incrementAndGet();
         final int retries = 100 - att;
@@ -437,9 +467,17 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             throw new IOException("Already reached maximum number of attempts");
         }
         this.connecting.set(true);
-        this.xmppConnection = XmppUtils.persistentXmppConnection(username, 
-            password, id, retries, this.xmppServerHost, this.xmppServerPort, 
-            this.xmppServiceName, this);
+        try {
+            this.xmppConnection = XmppUtils.persistentXmppConnection(username, 
+                password, id, retries, this.xmppServerHost, this.xmppServerPort, 
+                this.xmppServiceName, this);
+        } catch (final CredentialException e) {
+            this.connecting.set(false);
+            throw e;
+        } catch (final IOException e) {
+            this.connecting.set(false);
+            throw e;
+        }
         this.connecting.set(false);
         processMessages();
         return this.xmppConnection.getUser();
