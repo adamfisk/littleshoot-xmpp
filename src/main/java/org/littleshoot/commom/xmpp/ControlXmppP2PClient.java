@@ -884,8 +884,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             msg.setProperty(P2PConstants.MESSAGE_TYPE, P2PConstants.INVITE);
             msg.setProperty(P2PConstants.SDP, base64Sdp);
             msg.setProperty(P2PConstants.CONTROL, "true");
-            final byte[] writeKey = keyStorage.getWriteKey();
-            log.info("Setting client write key to: {}", writeKey);
+            //final byte[] writeKey = keyStorage.getWriteKey();
+            //log.info("Setting client write key to: {}", writeKey);
             //msg.setProperty(P2PConstants.SECRET_KEY, 
             //    Base64.encodeBase64String(writeKey));
             return msg;
