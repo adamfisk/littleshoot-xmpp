@@ -42,7 +42,6 @@ import org.jivesoftware.smackx.packet.VCard;
 import org.jivesoftware.smackx.provider.VCardProvider;
 import org.lastbamboo.common.p2p.P2PConstants;
 import org.littleshoot.dnssec4j.VerifiedAddressFactory;
-import org.littleshoot.util.ThreadUtils;
 import org.littleshoot.util.xml.XPathUtils;
 import org.littleshoot.util.xml.XmlUtils;
 import org.slf4j.Logger;
