@@ -42,6 +42,7 @@ import org.jivesoftware.smackx.packet.VCard;
 import org.jivesoftware.smackx.provider.VCardProvider;
 import org.lastbamboo.common.p2p.P2PConstants;
 import org.littleshoot.dnssec4j.VerifiedAddressFactory;
+import org.littleshoot.util.ThreadUtils;
 import org.littleshoot.util.xml.XPathUtils;
 import org.littleshoot.util.xml.XmlUtils;
 import org.slf4j.Logger;
@@ -280,12 +281,12 @@ public class XmppUtils {
         XMPPException exc = null;
         for (int i = 0; i < attempts; i++) {
             try {
-                LOG.info("Attempting XMPP connection...");
+                LOG.debug("Attempting XMPP connection...");
                 final XMPPConnection conn = 
                     singleXmppConnection(username, password, id, host, port, 
                         serviceName, clientListener);
                 
-                LOG.info("Created offerer");
+                LOG.debug("Created offerer");
                 xmppConnections.put(key, conn);
                 return conn;
             } catch (final XMPPException e) {
@@ -348,7 +349,7 @@ public class XmppUtils {
         final int xmppServerPort, final String xmppServiceName, 
         final XmppP2PClient clientListener) throws XMPPException, IOException, 
         CredentialException {
-        
+        LOG.debug("Creating single connection...");
         final InetAddress server = getHost(xmppServerHost);
         final ConnectionConfiguration config;
         if (getGlobalConfig() != null) {
@@ -463,17 +464,17 @@ public class XmppUtils {
             
             @Override
             public void reconnectionSuccessful() {
-                LOG.info("Reconnection successful...");
+                LOG.debug("Reconnection successful...");
             }
             
             @Override
             public void reconnectionFailed(final Exception e) {
-                LOG.info("Reconnection failed", e);
+                LOG.debug("Reconnection failed", e);
             }
             
             @Override
             public void reconnectingIn(final int time) {
-                LOG.info("Reconnecting to XMPP server in "+time);
+                LOG.debug("Reconnecting to XMPP server in "+time);
             }
             
             @Override
@@ -484,7 +485,7 @@ public class XmppUtils {
             
             @Override
             public void connectionClosed() {
-                LOG.info("XMPP connection closed. Creating new connection.");
+                LOG.debug("XMPP connection closed. Creating new connection.");
                 handleClose();
             }
             
@@ -495,8 +496,8 @@ public class XmppUtils {
             }
         });
         
-        LOG.info("Connection is Secure: {}", conn.isSecureConnection());
-        LOG.info("Connection is TLS: {}", conn.isUsingTLS());
+        LOG.debug("Connection is Secure: {}", conn.isSecureConnection());
+        LOG.debug("Connection is TLS: {}", conn.isUsingTLS());
 
         try {
             conn.login(username, password, id);
@@ -508,12 +509,12 @@ public class XmppUtils {
                 // non-credentials issues whenever we can.
                 throw e;
             }
-            LOG.info("Credentials error!", e);
+            LOG.debug("Credentials error!", e);
             throw new CredentialException("Authentication error");
         }
         
         while (!conn.isAuthenticated()) {
-            LOG.info("Waiting for authentication");
+            LOG.debug("Waiting for authentication");
             try {
                 Thread.sleep(80);
             } catch (final InterruptedException e1) {
@@ -544,7 +545,7 @@ public class XmppUtils {
     
     public static Packet goOffTheRecord(final String jidToOtr, 
         final XMPPConnection conn) {
-        LOG.info("Activating OTR for {}...", jidToOtr);
+        LOG.debug("Activating OTR for {}...", jidToOtr);
         final String query =
             "<query xmlns='google:nosave'>"+
                 "<item xmlns='google:nosave' jid='"+jidToOtr+"' value='enabled'/>"+
@@ -554,7 +555,7 @@ public class XmppUtils {
     
     public static Packet goOnTheRecord(final String jidToOtr, 
         final XMPPConnection conn) {
-        LOG.info("Activating OTR for {}...", jidToOtr);
+        LOG.debug("Activating OTR for {}...", jidToOtr);
         final String query =
             "<query xmlns='google:nosave'>"+
                 "<item xmlns='google:nosave' jid='"+jidToOtr+"' value='disabled'/>"+
@@ -563,18 +564,18 @@ public class XmppUtils {
     }
 
     public static Packet getOtr(final XMPPConnection conn) {
-        LOG.info("Getting OTR status...");
+        LOG.debug("Getting OTR status...");
         return getGTalkProperty(conn, "<query xmlns='google:nosave'/>");
     }
     
     public static Packet getSharedStatus(final XMPPConnection conn) {
-        LOG.info("Getting shared status...");
+        LOG.debug("Getting shared status...");
         return getGTalkProperty(conn, 
             "<query xmlns='google:shared-status' version='2'/>");
     }
     
     public static RosterPacket extendedRoster(final XMPPConnection conn) {
-        LOG.info("Requesting extended roster");
+        LOG.debug("Requesting extended roster");
         final String query =
             "<query xmlns:gr='google:roster' gr:ext='2' xmlns='jabber:iq:roster'/>";
         return (RosterPacket) getGTalkProperty(conn, query);
@@ -582,14 +583,14 @@ public class XmppUtils {
     
     public static Collection<InetSocketAddress> googleStunServers(
         final XMPPConnection conn) {
-        LOG.info("Getting Google STUN servers...");
+        LOG.debug("Getting Google STUN servers...");
         final String xml = 
             getGTalkProperty(conn, "<query xmlns='google:jingleinfo'/>").toXML();
         return extractStunServers(xml);
     }
     
     public static Packet discoveryRequest(final XMPPConnection conn) {
-        LOG.info("Sending discovery request...");
+        LOG.debug("Sending discovery request...");
         return getGTalkProperty(conn, 
             "<query xmlns='http://jabber.org/protocol/disco#info'/>");
     }
@@ -607,7 +608,7 @@ public class XmppUtils {
     private static Packet sendXmppMessage(final XMPPConnection conn, 
         final String query, final Type iqType) {
         
-        LOG.info("Sending XMPP stanza message...");
+        LOG.debug("Sending XMPP stanza message...");
         final IQ iq = new IQ() {
             @Override
             public String getChildElementXML() {
@@ -621,7 +622,7 @@ public class XmppUtils {
         final PacketCollector collector = conn.createPacketCollector(
             new PacketIDFilter(iq.getPacketID()));
         
-        LOG.info("Sending XMPP stanza packet:\n"+iq.toXML());
+        LOG.debug("Sending XMPP stanza packet:\n"+iq.toXML());
         conn.sendPacket(iq);
         final Packet response = collector.nextResult(40000);
         return response;
@@ -645,7 +646,7 @@ public class XmppUtils {
         };
         iq.setType(Type.SET);
         iq.setTo(to);
-        LOG.info("Setting invisible with XML packet:\n"+iq.toXML());
+        LOG.debug("Setting invisible with XML packet:\n"+iq.toXML());
         conn.sendPacket(iq);
     }
 }
