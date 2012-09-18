@@ -269,7 +269,7 @@ public class XmppUtils {
         final String key = username+password;
         if (xmppConnections.containsKey(key)) {
             final XMPPConnection conn = xmppConnections.get(key);
-            if (conn.isAuthenticated() && conn.isConnected()) {
+            if (isEstablished(conn)) {
                 LOG.info("Returning existing xmpp connection");
                 return conn;
             } else {
@@ -309,6 +309,10 @@ public class XmppUtils {
         }
     }
     
+    private static boolean isEstablished(final XMPPConnection conn) {
+        return conn.isAuthenticated() && conn.isConnected();
+    }
+
     private static InetAddress getHost(final String host) throws IOException {
         return VerifiedAddressFactory.newVerifiedInetAddress(host, 
             XmppConfig.isUseDnsSec());
@@ -512,7 +516,7 @@ public class XmppUtils {
             throw new CredentialException("Authentication error");
         }
         
-        while (!conn.isAuthenticated()) {
+        while (!isEstablished(conn)) {
             LOG.debug("Waiting for authentication");
             try {
                 Thread.sleep(80);
@@ -521,6 +525,7 @@ public class XmppUtils {
             }
         }
         
+        LOG.debug("Returning connection...");
         return conn;
     }
     
