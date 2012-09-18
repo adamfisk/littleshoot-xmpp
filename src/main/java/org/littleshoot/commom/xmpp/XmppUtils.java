@@ -583,9 +583,13 @@ public class XmppUtils {
     public static Collection<InetSocketAddress> googleStunServers(
         final XMPPConnection conn) {
         LOG.debug("Getting Google STUN servers...");
-        final String xml = 
-            getGTalkProperty(conn, "<query xmlns='google:jingleinfo'/>").toXML();
-        return extractStunServers(xml);
+        final Packet pack = 
+            getGTalkProperty(conn, "<query xmlns='google:jingleinfo'/>");
+        if (pack == null) {
+            LOG.warn("Did not get response to Google stun server request!");
+            return Collections.emptyList();
+        }
+        return extractStunServers(pack.toXML());
     }
     
     public static Packet discoveryRequest(final XMPPConnection conn) {
