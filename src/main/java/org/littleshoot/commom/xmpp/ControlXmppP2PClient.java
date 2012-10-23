@@ -296,7 +296,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             sock = this.socketFactory.createSocket();
         }
         try {
-            sock.connect(serverIp, 30 * 1000);
+            sock.connect(serverIp, 40 * 1000);
             return sock;
         } catch (final IOException e) {
             log.info("Could not connect -- peer offline?", e);
@@ -735,14 +735,15 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
 
         private boolean addMappedServer() {
-            final String ip = (String) msg.getProperty(P2PConstants.PUBLIC_IP);
-            log.info("Got public IP address: {}", ip);
-            if (StringUtils.isNotBlank(ip)) {
+            final String remoteIp = 
+                (String) msg.getProperty(P2PConstants.PUBLIC_IP);
+            log.info("Got public IP address: {}", remoteIp);
+            if (StringUtils.isNotBlank(remoteIp)) {
                 final Integer port = 
                     (Integer) msg.getProperty(P2PConstants.MAPPED_PORT);
                 if (port != null) {
                     final InetSocketAddress mapped =
-                        new InetSocketAddress(ip, port);
+                        new InetSocketAddress(remoteIp, port);
                     log.info("ADDING MAPPED SERVER PORT!!");
                     try {
                         urisToMappedServers.put(new URI(msg.getFrom()), mapped);
