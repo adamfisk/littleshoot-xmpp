@@ -13,7 +13,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -90,36 +89,20 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private final SessionSocketListener callSocketListener;
 
     private final InetSocketAddress plainTextRelayAddress;
-    
-    private static final String mp = 
-        ControlXmppP2PClient.class.getSimpleName()+"-Message-Processing-";
 
-    private static final String ip = 
-        ControlXmppP2PClient.class.getSimpleName()+"-Invite-Processing-";
-    
-    private static final ExecutorService messageProcessingExecutor = 
+    private static final ExecutorService exec = 
         Executors.newCachedThreadPool(new ThreadFactory() {
-            private int count = 0;
-            @Override
-            public Thread newThread(Runnable r) {
-                final Thread t = new Thread(r, mp+count);
-                t.setDaemon(true);
-                count++;
-                return t;
-            }
-        });
-    
-    private static final ExecutorService inviteProcessingExecutor = 
-        Executors.newCachedThreadPool(new ThreadFactory() {
-            private int count = 0;
-            @Override
-            public Thread newThread(Runnable r) {
-                final Thread t = new Thread(r, ip+count);
-                t.setDaemon(true);
-                count++;
-                return t;
-            }
-        });
+        
+        private AtomicInteger counter = new AtomicInteger(0);
+        
+        @Override
+        public Thread newThread(final Runnable r) {
+            final Thread thread = 
+                new Thread(r, "ControlXmppP2PClient-Thread-Pool-"+
+                    counter.incrementAndGet());
+            return thread;
+        }
+    });
     
     private final Map<URI, SSLSocket> outgoingControlSockets = 
         new ConcurrentHashMap<URI, SSLSocket>();
@@ -331,18 +314,6 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
     }
 
-    private final Executor exec = Executors.newCachedThreadPool(new ThreadFactory() {
-        
-        private AtomicInteger counter = new AtomicInteger(0);
-        
-        @Override
-        public Thread newThread(final Runnable r) {
-            final Thread thread = 
-                new Thread(r, "P2P-Connection-Notify-Thread-"+counter.incrementAndGet());
-            return thread;
-        }
-    });
-
     private String username;
 
     private String password;
@@ -539,8 +510,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     final Message error = newError(msg);
                     xmppConnection.sendPacket(error);
                 } else {
-                    messageProcessingExecutor.execute(
-                        new PacketProcessor(msg));
+                    exec.execute(new PacketProcessor(msg));
                 }
             }
         };
@@ -1030,7 +1000,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         writeMessage(inviteOk, controlSocket);
         log.info("Wrote INVITE OK");
         
-        inviteProcessingExecutor.submit(new Runnable() {
+        exec.submit(new Runnable() {
             @Override
             public void run() {
                 log.info("Passing offer processing to listener...");
