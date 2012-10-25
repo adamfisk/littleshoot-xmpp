@@ -91,13 +91,13 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private final InetSocketAddress plainTextRelayAddress;
     
-    private final String mp = 
+    private static final String mp = 
         ControlXmppP2PClient.class.getSimpleName()+"-Message-Processing-";
 
-    private final String ip = 
+    private static final String ip = 
         ControlXmppP2PClient.class.getSimpleName()+"-Invite-Processing-";
     
-    private final ExecutorService messageProcessingExecutor = 
+    private static final ExecutorService messageProcessingExecutor = 
         Executors.newCachedThreadPool(new ThreadFactory() {
             private int count = 0;
             @Override
@@ -109,7 +109,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             }
         });
     
-    private final ExecutorService inviteProcessingExecutor = 
+    private static final ExecutorService inviteProcessingExecutor = 
         Executors.newCachedThreadPool(new ThreadFactory() {
             private int count = 0;
             @Override
