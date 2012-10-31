@@ -413,12 +413,14 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                 serverHost, serverPort, serviceName);
     }
 
+    @Override
     public String login(final XmppCredentials credentials)
         throws CredentialException, IOException {
         return login(credentials, this.xmppServerHost, this.xmppServerPort,
                      this.xmppServiceName);
     }
 
+    @Override
     public String login(final XmppCredentials credentials,
         final String serverHost, final int serverPort,
         final String serviceName)
