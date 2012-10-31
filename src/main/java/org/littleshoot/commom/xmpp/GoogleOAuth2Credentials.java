@@ -46,6 +46,10 @@ public class GoogleOAuth2Credentials implements XmppCredentials, CallbackHandler
         this.resource = resource;
     }
 
+    public String getUsername() {
+        return username;
+    }
+
     public String getKey() {
         return username + refreshToken;
     }

@@ -5,6 +5,7 @@ import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
 
 public interface XmppCredentials {
+    String getUsername();
     String getKey();
     XMPPConnection createConnection(ConnectionConfiguration config);
     void login(XMPPConnection conn) throws XMPPException;

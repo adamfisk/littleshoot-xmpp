@@ -21,6 +21,10 @@ public class PasswordCredentials implements XmppCredentials {
         this.resource = resource;
     }
 
+    public String getUsername() {
+        return username;
+    }
+
     public String getKey() {
         return username + password;
     }
