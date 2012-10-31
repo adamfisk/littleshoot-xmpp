@@ -54,22 +54,23 @@ import org.xml.sax.SAXException;
 import org.xmlpull.v1.XmlPullParser;
 
 public class XmppUtils {
-    
+
+
     private static final Logger LOG = LoggerFactory.getLogger(XmppUtils.class);
     private static ConnectionConfiguration globalConfig;
-    
+
     private XmppUtils() {}
-    
+
     static {
-        
+
         ProviderManager.getInstance().addIQProvider("vCard", "vcard-temp",
                 new VCardProvider());
         //ProviderManager.getInstance().addIQProvider(
         //    "query", "google:shared-status", new GenericIQProvider());
-        
+
         ProviderManager.getInstance().addIQProvider(
                 "query", "google:shared-status", new GenericIQProvider() {
-                    
+
                     @Override
                     public IQ parseIQ(final XmlPullParser parser) throws Exception {
                         //System.out.println("GOT PULL PARSER: "+parser);
@@ -79,14 +80,14 @@ public class XmppUtils {
         ProviderManager.getInstance().addIQProvider(
             "query", "google:nosave", new GenericIQProvider());
         ProviderManager.getInstance().addIQProvider(
-            "query", "http://jabber.org/protocol/disco#info", 
+            "query", "http://jabber.org/protocol/disco#info",
             new GenericIQProvider());
         ProviderManager.getInstance().addIQProvider(
             "query", "google:jingleinfo", new GenericIQProvider());
         /*
         ProviderManager.getInstance().addIQProvider(
             "query", "jabber:iq:roster", new GenericIQProvider() {
-                
+
                 @Override
                 public IQ parseIQ(final XmlPullParser parser) throws Exception {
                     System.out.println("GOT PULL PARSER: "+parser);
@@ -95,7 +96,7 @@ public class XmppUtils {
             });
         ProviderManager.getInstance().addIQProvider(
             "query", "google:roster", new GenericIQProvider() {
-                
+
                 @Override
                 public IQ parseIQ(final XmlPullParser parser) throws Exception {
                     System.out.println("GOT GOOGLE ROSTER PULL PARSER: "+parser);
@@ -108,14 +109,14 @@ public class XmppUtils {
     /**
      * Extracts STUN servers from a response from Google Talk containing
      * those servers.
-     * 
+     *
      * @param xml The XML with server data.
      * @return The servers.
      */
     public static Collection<InetSocketAddress> extractStunServers(
         final String xml) {
         LOG.info("Processing XML: {}", xml);
-        final Collection<InetSocketAddress> servers = 
+        final Collection<InetSocketAddress> servers =
             new ArrayList<InetSocketAddress>(12);
         final Document doc;
         try {
@@ -133,7 +134,7 @@ public class XmppUtils {
             final NodeList nodes = xpath.getNodes(str);
             for (int i = 0; i < nodes.getLength(); i++) {
                 final Node node = nodes.item(i);
-                
+
                 final NamedNodeMap nnm = node.getAttributes();
                 final Node hostNode = nnm.getNamedItem("host");
                 final Node portNode = nnm.getNamedItem("udp");
@@ -154,7 +155,7 @@ public class XmppUtils {
             throw new Error("Tested XPath no longer working: "+str, e);
         }
     }
-    
+
     public static String extractSdp(final Document doc) {
         return extractXmppProperty(doc, P2PConstants.SDP);
     }
@@ -162,13 +163,13 @@ public class XmppUtils {
     //public static String extractKey(final Document doc) {
     //    return extractXmppProperty(doc, P2PConstants.SECRET_KEY);
     //}
-    
+
 
     public static long extractTransactionId(final Document doc) {
         final String id = extractXmppProperty(doc, P2PConstants.TRANSACTION_ID);
         return Long.parseLong(id);
     }
-    
+
 
     public static String extractFrom(final Document doc) {
         final String xml = XmlUtils.toString(doc);
@@ -182,12 +183,12 @@ public class XmppUtils {
         }
     }
 
-    private static String extractXmppProperty(final Document doc, 
+    private static String extractXmppProperty(final Document doc,
         final String name) {
         //final String xml = XmlUtils.toString(doc);
         //LOG.info("Got an XMPP message: {}", xml);
         final XPathUtils xpath = XPathUtils.newXPath(doc);
-        final String str = 
+        final String str =
             "/message/properties/property[name='"+name+"']/value";
         try {
             return xpath.getString(str);
@@ -218,7 +219,7 @@ public class XmppUtils {
         }
         sb.append("\nPACKET ID: ");
         sb.append(msg.getPacketID());
-        
+
         sb.append("\nERROR: ");
         if (error != null) {
             sb.append(error);
@@ -243,30 +244,40 @@ public class XmppUtils {
         sb.append(msg.getPropertyNames());
         return sb.toString();
     }
-    
 
-    private static final Map<String, XMPPConnection> xmppConnections = 
+
+    private static final Map<String, XMPPConnection> xmppConnections =
         new ConcurrentHashMap<String, XMPPConnection>();
 
-    static XMPPConnection persistentXmppConnection(final String username, 
-            final String password, final String id) throws IOException, 
+    static XMPPConnection persistentXmppConnection(final String username,
+            final String password, final String id) throws IOException,
             CredentialException {
         return persistentXmppConnection(username, password, id, 4);
     }
-    
-    public static XMPPConnection persistentXmppConnection(final String username, 
-        final String password, final String id, final int attempts) 
+
+    public static XMPPConnection persistentXmppConnection(final String username,
+        final String password, final String id, final int attempts)
         throws IOException, CredentialException {
-        return persistentXmppConnection(username, password, id, attempts, 
+        return persistentXmppConnection(username, password, id, attempts,
             "talk.google.com", 5222, "gmail.com", null);
     }
-    
-    public static XMPPConnection persistentXmppConnection(final String username, 
+
+    public static XMPPConnection persistentXmppConnection(final String username,
         final String password, final String id, final int attempts,
         final String host, final int port, final String serviceName,
-        final XmppP2PClient clientListener) 
+        final XmppP2PClient clientListener)
             throws IOException, CredentialException {
-        final String key = username+password;
+        return persistentXmppConnection(
+            new PasswordCredentials(username, password, id),
+            attempts, host, port, serviceName, clientListener);
+    }
+
+    public static XMPPConnection persistentXmppConnection(
+        final XmppCredentials credentials, final int attempts,
+        final String host, final int port, final String serviceName,
+        final XmppP2PClient clientListener)
+            throws IOException, CredentialException {
+        final String key = credentials.getKey();
         if (xmppConnections.containsKey(key)) {
             final XMPPConnection conn = xmppConnections.get(key);
             if (isEstablished(conn)) {
@@ -281,19 +292,19 @@ public class XmppUtils {
         for (int i = 0; i < attempts; i++) {
             try {
                 LOG.debug("Attempting XMPP connection...");
-                final XMPPConnection conn = 
-                    singleXmppConnection(username, password, id, host, port, 
+                final XMPPConnection conn =
+                    singleXmppConnection(credentials, host, port,
                         serviceName, clientListener);
-                
+
                 LOG.debug("Created offerer");
                 xmppConnections.put(key, conn);
                 return conn;
             } catch (final XMPPException e) {
                 final String msg = "Error creating XMPP connection";
                 LOG.error(msg, e);
-                exc = e;    
-            } 
-            
+                exc = e;
+            }
+
             // Gradual backoff.
             try {
                 Thread.sleep(i * 200);
@@ -308,24 +319,24 @@ public class XmppUtils {
             throw new IOException("Could not log in?");
         }
     }
-    
+
     private static boolean isEstablished(final XMPPConnection conn) {
         return conn.isAuthenticated() && conn.isConnected();
     }
 
     private static InetAddress getHost(final String host) throws IOException {
-        return VerifiedAddressFactory.newVerifiedInetAddress(host, 
+        return VerifiedAddressFactory.newVerifiedInetAddress(host,
             XmppConfig.isUseDnsSec());
     }
-    
+
     public static void setGlobalConfig(final ConnectionConfiguration config) {
         XmppUtils.globalConfig = config;
     }
-    
+
     public static ConnectionConfiguration getGlobalConfig() {
         return XmppUtils.globalConfig;
     }
-    
+
     private static ExecutorService connectors = Executors.newCachedThreadPool(
         new ThreadFactory() {
             private int count = 0;
@@ -337,20 +348,34 @@ public class XmppUtils {
                 return t;
             }
         });
-    
-    
+
     public static XMPPConnection simpleGoogleTalkConnection(
-        final String username, final String password, final String id) 
+        final String username, final String password, final String id)
         throws CredentialException, XMPPException, IOException {
-        
-        return singleXmppConnection(username, password, id, "talk.google.com", 
+        return simpleGoogleTalkConnection(
+            new PasswordCredentials(username, password, id));
+    }
+
+    public static XMPPConnection simpleGoogleTalkConnection(
+        final XmppCredentials credentials)
+        throws CredentialException, XMPPException, IOException {
+        return singleXmppConnection(credentials, "talk.google.com",
             5222, "gmail.com", null);
     }
-    
-    private static XMPPConnection singleXmppConnection(final String username, 
-        final String password, final String id, final String xmppServerHost, 
-        final int xmppServerPort, final String xmppServiceName, 
-        final XmppP2PClient clientListener) throws XMPPException, IOException, 
+
+    private static XMPPConnection singleXmppConnection(final String username,
+        final String password, final String id, final String xmppServerHost,
+        final int xmppServerPort, final String xmppServiceName,
+        final XmppP2PClient clientListener) throws XMPPException, IOException,
+        CredentialException {
+        return singleXmppConnection(new PasswordCredentials(username, password, id),
+                xmppServerHost, xmppServerPort, xmppServiceName, clientListener);
+    }
+
+    private static XMPPConnection singleXmppConnection(
+        final XmppCredentials credentials, final String xmppServerHost,
+        final int xmppServerPort, final String xmppServiceName,
+        final XmppP2PClient clientListener) throws XMPPException, IOException,
         CredentialException {
         LOG.debug("Creating single connection...");
         final InetAddress server = getHost(xmppServerHost);
@@ -360,12 +385,12 @@ public class XmppUtils {
         } else {
             config = newConfig(server, xmppServerPort, xmppServiceName);
         }
-        
-        final Future<XMPPConnection> fut = 
+
+        final Future<XMPPConnection> fut =
             connectors.submit(new Callable<XMPPConnection>() {
             @Override
             public XMPPConnection call() throws Exception {
-                return newConnection(username, password, config, id, clientListener);
+                return newConnection(credentials, config, clientListener);
             }
         });
         try {
@@ -398,45 +423,45 @@ public class XmppUtils {
      */
     private static ConnectionConfiguration newConfig(final InetAddress server,
         final int xmppServerPort, final String xmppServiceName) {
-        final ConnectionConfiguration config = 
-            new ConnectionConfiguration(server.getHostAddress(), 
+        final ConnectionConfiguration config =
+            new ConnectionConfiguration(server.getHostAddress(),
                 xmppServerPort, xmppServiceName);
         config.setExpiredCertificatesCheckEnabled(true);
         config.setNotMatchingDomainCheckEnabled(true);
         config.setSendPresence(false);
-        
+
         config.setCompressionEnabled(true);
-        
+
         //config.setRosterLoadedAtLogin(true);
         config.setReconnectionAllowed(false);
-        
+
         config.setVerifyChainEnabled(true);
 
         // This is commented out because the Google Talk signing cert is not
         // trusted by java by default.
         //config.setVerifyRootCAEnabled(true);
         config.setSelfSignedCertificateEnabled(false);
-        
+
         config.setSocketFactory(new SocketFactory() {
-            
+
             @Override
-            public Socket createSocket(final InetAddress host, final int port, 
-                final InetAddress localHost, final int localPort) 
+            public Socket createSocket(final InetAddress host, final int port,
+                final InetAddress localHost, final int localPort)
                 throws IOException {
                 // We ignore the local port binding.
                 return createSocket(host, port);
             }
-            
+
             @Override
-            public Socket createSocket(final String host, final int port, 
+            public Socket createSocket(final String host, final int port,
                 final InetAddress localHost, final int localPort)
                 throws IOException, UnknownHostException {
                 // We ignore the local port binding.
                 return createSocket(host, port);
             }
-            
+
             @Override
-            public Socket createSocket(final InetAddress host, final int port) 
+            public Socket createSocket(final InetAddress host, final int port)
                 throws IOException {
                 LOG.info("Creating socket");
                 final Socket sock = new Socket();
@@ -444,9 +469,9 @@ public class XmppUtils {
                 LOG.info("Socket connected");
                 return sock;
             }
-            
+
             @Override
-            public Socket createSocket(final String host, final int port) 
+            public Socket createSocket(final String host, final int port)
                 throws IOException, UnknownHostException {
                 LOG.info("Creating socket");
                 return createSocket(InetAddress.getByName(host), port);
@@ -455,55 +480,70 @@ public class XmppUtils {
         return config;
     }
 
-    private static XMPPConnection newConnection(final String username, 
+    private interface ConnectionHandler {
+        void setupConnection(XMPPConnection conn);
+        void login(XMPPConnection conn) throws XMPPException;
+    }
+
+    private static XMPPConnection newConnection(final String username,
         final String password, final ConnectionConfiguration config,
-        final String id, final XmppP2PClient clientListener) 
+        final String id, final XmppP2PClient clientListener)
+        throws XMPPException, CredentialException {
+        return newConnection(new PasswordCredentials(username, password, id),
+                             config,
+                             clientListener);
+    }
+
+    private static XMPPConnection newConnection(
+        XmppCredentials credentials,
+        final ConnectionConfiguration config,
+        final XmppP2PClient clientListener)
         throws XMPPException, CredentialException {
         config.setSecurityMode(SecurityMode.required);
         //config.setSecurityMode(SecurityMode.disabled);
-        final XMPPConnection conn = new XMPPConnection(config);
+        final XMPPConnection conn = credentials.createConnection(config);
         conn.connect();
         conn.addConnectionListener(new ConnectionListener() {
-            
+
             @Override
             public void reconnectionSuccessful() {
                 LOG.debug("Reconnection successful...");
             }
-            
+
             @Override
             public void reconnectionFailed(final Exception e) {
                 LOG.debug("Reconnection failed", e);
             }
-            
+
             @Override
             public void reconnectingIn(final int time) {
                 LOG.debug("Reconnecting to XMPP server in "+time);
             }
-            
+
             @Override
             public void connectionClosedOnError(final Exception e) {
                 LOG.warn("XMPP connection closed on error", e);
                 handleClose();
             }
-            
+
             @Override
             public void connectionClosed() {
                 LOG.debug("XMPP connection closed. Creating new connection.");
                 handleClose();
             }
-            
+
             private void handleClose() {
                 if (clientListener != null) {
                     clientListener.handleClose();
                 }
             }
         });
-        
+
         LOG.debug("Connection is Secure: {}", conn.isSecureConnection());
         LOG.debug("Connection is TLS: {}", conn.isUsingTLS());
 
         try {
-            conn.login(username, password, id);
+            credentials.login(conn);
         } catch (final XMPPException e) {
             //conn.disconnect();
             final String msg = e.getMessage();
@@ -515,7 +555,7 @@ public class XmppUtils {
             LOG.debug("Credentials error!", e);
             throw new CredentialException("Authentication error");
         }
-        
+
         while (!isEstablished(conn)) {
             LOG.debug("Waiting for authentication");
             try {
@@ -524,30 +564,30 @@ public class XmppUtils {
                 LOG.error("Exception during sleep?", e1);
             }
         }
-        
+
         LOG.debug("Returning connection...");
         return conn;
     }
-    
+
     public static String jidToUser(final String jid) {
         return StringUtils.substringBefore(jid, "/");
     }
-    
+
     public static String jidToUser(final XMPPConnection conn) {
         return jidToUser(conn.getUser());
     }
-    
-    public static VCard getVCard(final XMPPConnection conn, 
+
+    public static VCard getVCard(final XMPPConnection conn,
         final String emailId) throws XMPPException {
         final VCard card = new VCard();
         card.load(conn, emailId);
         return card;
     }
-    
-    //// The following includes a whole bunch of custom Google Talk XMPP 
+
+    //// The following includes a whole bunch of custom Google Talk XMPP
     //// messages.
-    
-    public static Packet goOffTheRecord(final String jidToOtr, 
+
+    public static Packet goOffTheRecord(final String jidToOtr,
         final XMPPConnection conn) {
         LOG.debug("Activating OTR for {}...", jidToOtr);
         final String query =
@@ -556,8 +596,8 @@ public class XmppUtils {
              "</query>";
         return setGTalkProperty(conn, query);
     }
-    
-    public static Packet goOnTheRecord(final String jidToOtr, 
+
+    public static Packet goOnTheRecord(final String jidToOtr,
         final XMPPConnection conn) {
         LOG.debug("Activating OTR for {}...", jidToOtr);
         final String query =
@@ -571,24 +611,24 @@ public class XmppUtils {
         LOG.debug("Getting OTR status...");
         return getGTalkProperty(conn, "<query xmlns='google:nosave'/>");
     }
-    
+
     public static Packet getSharedStatus(final XMPPConnection conn) {
         LOG.debug("Getting shared status...");
-        return getGTalkProperty(conn, 
+        return getGTalkProperty(conn,
             "<query xmlns='google:shared-status' version='2'/>");
     }
-    
+
     public static RosterPacket extendedRoster(final XMPPConnection conn) {
         LOG.debug("Requesting extended roster");
         final String query =
             "<query xmlns:gr='google:roster' gr:ext='2' xmlns='jabber:iq:roster'/>";
         return (RosterPacket) getGTalkProperty(conn, query);
     }
-    
+
     public static Collection<InetSocketAddress> googleStunServers(
         final XMPPConnection conn) {
         LOG.debug("Getting Google STUN servers...");
-        final Packet pack = 
+        final Packet pack =
             getGTalkProperty(conn, "<query xmlns='google:jingleinfo'/>");
         if (pack == null) {
             LOG.warn("Did not get response to Google stun server request!");
@@ -596,26 +636,26 @@ public class XmppUtils {
         }
         return extractStunServers(pack.toXML());
     }
-    
+
     public static Packet discoveryRequest(final XMPPConnection conn) {
         LOG.debug("Sending discovery request...");
-        return getGTalkProperty(conn, 
+        return getGTalkProperty(conn,
             "<query xmlns='http://jabber.org/protocol/disco#info'/>");
     }
-    
-    private static Packet setGTalkProperty(final XMPPConnection conn, 
+
+    private static Packet setGTalkProperty(final XMPPConnection conn,
         final String query) {
         return sendXmppMessage(conn, query, Type.SET);
     }
-    
-    private static Packet getGTalkProperty(final XMPPConnection conn, 
+
+    private static Packet getGTalkProperty(final XMPPConnection conn,
         final String query) {
         return sendXmppMessage(conn, query, Type.GET);
     }
-    
-    private static Packet sendXmppMessage(final XMPPConnection conn, 
+
+    private static Packet sendXmppMessage(final XMPPConnection conn,
         final String query, final Type iqType) {
-        
+
         LOG.debug("Sending XMPP stanza message...");
         final IQ iq = new IQ() {
             @Override
@@ -629,7 +669,7 @@ public class XmppUtils {
         iq.setType(iqType);
         final PacketCollector collector = conn.createPacketCollector(
             new PacketIDFilter(iq.getPacketID()));
-        
+
         LOG.debug("Sending XMPP stanza packet:\n"+iq.toXML());
         conn.sendPacket(iq);
         final Packet response = collector.nextResult(40000);
@@ -638,13 +678,13 @@ public class XmppUtils {
 
     /**
      * Note we don't even need to set this property to maintain compatibility
-     * with Google Talk presence -- just sending them the shared status 
+     * with Google Talk presence -- just sending them the shared status
      * message signifies we generally understand the protocol and allows us
      * to not clobber other clients' presences.
      * @param conn
      * @param to
      */
-    public static void setGoogleTalkInvisible(final XMPPConnection conn, 
+    public static void setGoogleTalkInvisible(final XMPPConnection conn,
         final String to) {
         final IQ iq = new IQ() {
             @Override
