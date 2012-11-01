@@ -135,6 +135,17 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com", 
             false, publicIp, socketFactory);
     }
+    
+    public static ControlXmppP2PClient newClient(
+        final OfferAnswerFactory factory,
+        final InetSocketAddress plainTextRelayAddress, 
+        final SessionSocketListener callSocketListener, final int relayWait,
+        final PublicIp publicIp, final SocketFactory socketFactory,
+        final String host, final int port, final String serviceName) {
+        return new ControlXmppP2PClient(factory, plainTextRelayAddress, 
+            callSocketListener, relayWait, host, port, serviceName, 
+            false, publicIp, socketFactory);
+    }
 
     /*
     public static ControlXmppP2PClient newGoogleTalkClient(
