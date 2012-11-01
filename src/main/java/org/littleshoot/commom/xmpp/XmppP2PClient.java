@@ -29,4 +29,11 @@ public interface XmppP2PClient extends P2PClient {
     String login(String user, String pass, String serverHost, int serverPort,
             String serviceName, String id) throws IOException,
             CredentialException;
+
+    String login(XmppCredentials credentials) throws IOException,
+            CredentialException;
+
+    String login(XmppCredentials credentials, String serverHost, int serverPort,
+            String serviceName) throws IOException,
+            CredentialException;
 }
