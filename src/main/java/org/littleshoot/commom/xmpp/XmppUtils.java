@@ -1,6 +1,7 @@
 package org.littleshoot.commom.xmpp;
 
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -38,6 +39,7 @@ import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smack.packet.RosterPacket;
 import org.jivesoftware.smack.packet.XMPPError;
 import org.jivesoftware.smack.provider.ProviderManager;
+import org.jivesoftware.smack.proxy.ProxyInfo.ProxyType;
 import org.jivesoftware.smackx.packet.VCard;
 import org.jivesoftware.smackx.provider.VCardProvider;
 import org.lastbamboo.common.p2p.P2PConstants;
@@ -58,6 +60,7 @@ public class XmppUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(XmppUtils.class);
     private static ConnectionConfiguration globalConfig;
+    private static ConnectionConfiguration globalProxyConfig;
 
     private XmppUtils() {}
 
@@ -300,8 +303,7 @@ public class XmppUtils {
                 xmppConnections.put(key, conn);
                 return conn;
             } catch (final XMPPException e) {
-                final String msg = "Error creating XMPP connection";
-                LOG.error(msg, e);
+                LOG.error("Error creating XMPP connection", e);
                 exc = e;
             }
 
@@ -336,6 +338,14 @@ public class XmppUtils {
     public static ConnectionConfiguration getGlobalConfig() {
         return XmppUtils.globalConfig;
     }
+    
+    public static void setGlobalProxyConfig(final ConnectionConfiguration config) {
+        XmppUtils.globalProxyConfig = config;
+    }
+
+    public static ConnectionConfiguration getGlobalProxyConfig() {
+        return XmppUtils.globalProxyConfig;
+    }
 
     private static ExecutorService connectors = Executors.newCachedThreadPool(
         new ThreadFactory() {
@@ -362,22 +372,13 @@ public class XmppUtils {
         return singleXmppConnection(credentials, "talk.google.com",
             5222, "gmail.com", null);
     }
-
-    private static XMPPConnection singleXmppConnection(final String username,
-        final String password, final String id, final String xmppServerHost,
-        final int xmppServerPort, final String xmppServiceName,
-        final XmppP2PClient clientListener) throws XMPPException, IOException,
-        CredentialException {
-        return singleXmppConnection(new PasswordCredentials(username, password, id),
-                xmppServerHost, xmppServerPort, xmppServiceName, clientListener);
-    }
-
+    
     private static XMPPConnection singleXmppConnection(
         final XmppCredentials credentials, final String xmppServerHost,
         final int xmppServerPort, final String xmppServiceName,
         final XmppP2PClient clientListener) throws XMPPException, IOException,
         CredentialException {
-        LOG.debug("Creating single connection...");
+        LOG.debug("Creating single connection with direct config...");
         final InetAddress server = getHost(xmppServerHost);
         final ConnectionConfiguration config;
         if (getGlobalConfig() != null) {
@@ -385,7 +386,17 @@ public class XmppUtils {
         } else {
             config = newConfig(server, xmppServerPort, xmppServiceName);
         }
+        return singleXmppConnection(credentials, xmppServerHost, xmppServerPort, 
+                xmppServiceName, clientListener, config);
+    }
 
+    private static XMPPConnection singleXmppConnection(
+        final XmppCredentials credentials, final String xmppServerHost,
+        final int xmppServerPort, final String xmppServiceName,
+        final XmppP2PClient clientListener, 
+        final ConnectionConfiguration config) throws XMPPException, IOException,
+        CredentialException {
+        LOG.debug("Creating single connection...");
         final Future<XMPPConnection> fut =
             connectors.submit(new Callable<XMPPConnection>() {
             @Override
@@ -399,21 +410,78 @@ public class XmppUtils {
             XmppUtils.getSharedStatus(conn);
             return conn;
         } catch (final InterruptedException e) {
+            LOG.debug("Interrupted exception", e);
             throw new IOException("Interrupted during login!!", e);
         } catch (final ExecutionException e) {
-            final Throwable t = e.getCause();
-            if (t instanceof XMPPException) {
-                throw (XMPPException)t;
-            } else if (t instanceof IOException) {
-                throw (IOException)t;
-            } else if (t instanceof CredentialException) {
-                throw (CredentialException)t;
+            LOG.debug("Execution error connecting", e);
+            final Throwable cause = e.getCause();
+            LOG.debug("Cause", cause);
+            LOG.debug("Cause class: " + cause.getClass());
+            if (cause instanceof XMPPException) {
+                LOG.debug("Processing XMPPException...");
+                final String msg = cause.getMessage();
+                if (msg.startsWith("XMPPError connecting")) {
+                //final Throwable xmppCause = cause.getCause();
+                //LOG.info("xmppCause class: " + xmppCause.getClass());
+                //if (xmppCause instanceof IOException) {
+                    LOG.debug("Trying backup server with XMPPException...");
+                    return singleXmppConnection(credentials, xmppServerHost, 
+                        xmppServerPort, xmppServiceName, clientListener, 
+                        getProxyConfig(config, cause));
+                } 
+                /*
+                if (xmppCause instanceof XMPPException) {
+                    LOG.debug("Trying backup server with XMPPException...");
+                    return singleXmppConnection(credentials, xmppServerHost, 
+                        xmppServerPort, xmppServiceName, clientListener, 
+                        getProxyConfig(config, cause));
+                }*/
+                else {
+                    throw (XMPPException)cause;
+                }
+            } else if (cause instanceof IOException) {
+                // If we can't connect, we should try our backup proxy if it 
+                // exists.
+                LOG.debug("Trying backup server...");
+                return singleXmppConnection(credentials, xmppServerHost, 
+                    xmppServerPort, xmppServiceName, clientListener, 
+                    getProxyConfig(config, cause));
+            } else if (cause instanceof IllegalStateException) {
+                // This happens in Smack internally when it tries to add a 
+                // connection listener to an unconnected XMPP connection.
+                // See Connection.java
+                LOG.debug("Trying backup server...");
+                return singleXmppConnection(credentials, xmppServerHost, 
+                    xmppServerPort, xmppServiceName, clientListener, 
+                    getProxyConfig(config, cause));
+            } else if (cause instanceof CredentialException) {
+                throw (CredentialException)cause;
             } else {
-                throw new IllegalStateException ("Unrecognized cause", t);
+                throw new IllegalStateException ("Unrecognized cause", cause);
             }
         } catch (final TimeoutException e) {
+            LOG.info("Timeout exception", e);
             throw new IOException("Took too long to login!!", e);
         }
+    }
+
+    private static ConnectionConfiguration getProxyConfig(
+        final ConnectionConfiguration config, final Throwable t) 
+        throws IOException {
+        if (config.getProxy().getProxyType() == ProxyType.HTTP) {
+            LOG.debug("Config has proxy -- already tried proxy");
+            throw new IOException("Already tried proxy", t);
+        }
+        final ConnectionConfiguration proxyConfig = 
+            getGlobalProxyConfig();
+        if (proxyConfig == null) {
+            throw new IOException("Could not use backup proxy", t);
+        } 
+        if (proxyConfig.getProxy() == null) {
+            throw new IOException("Proxy config has no proxy!", t);
+        }
+        LOG.debug("Returning proxy config");
+        return proxyConfig;
     }
 
     /**
@@ -485,17 +553,8 @@ public class XmppUtils {
         void login(XMPPConnection conn) throws XMPPException;
     }
 
-    private static XMPPConnection newConnection(final String username,
-        final String password, final ConnectionConfiguration config,
-        final String id, final XmppP2PClient clientListener)
-        throws XMPPException, CredentialException {
-        return newConnection(new PasswordCredentials(username, password, id),
-                             config,
-                             clientListener);
-    }
-
     private static XMPPConnection newConnection(
-        XmppCredentials credentials,
+        final XmppCredentials credentials,
         final ConnectionConfiguration config,
         final XmppP2PClient clientListener)
         throws XMPPException, CredentialException {
