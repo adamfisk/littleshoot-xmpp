@@ -1,7 +1,6 @@
 package org.littleshoot.commom.xmpp;
 
 import java.io.IOException;
-import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;

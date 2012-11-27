@@ -6,39 +6,46 @@ import javax.security.auth.callback.TextInputCallback;
 import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.callback.UnsupportedCallbackException;
 
+import org.apache.commons.lang.StringUtils;
 import org.jivesoftware.smack.ConnectionConfiguration;
+import org.jivesoftware.smack.SASLAuthentication;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class GoogleOAuth2Credentials implements XmppCredentials, CallbackHandler {
 
-    private String username;
-    private String resource;
-    private String clientID;
-    private String clientSecret;
-    private String accessToken;
-    private String refreshToken;
+    private final Logger log = LoggerFactory.getLogger(getClass());
+    
+    private final String username;
+    private final String resource;
+    private final String clientID;
+    private final String clientSecret;
+    private final String accessToken;
+    private final String refreshToken;
 
-    public GoogleOAuth2Credentials(String username,
-                                   String clientID,
-                                   String clientSecret,
-                                   String accessToken,
-                                   String refreshToken) {
+    public GoogleOAuth2Credentials(final String username,
+                                   final String clientID,
+                                   final String clientSecret,
+                                   final String accessToken,
+                                   final String refreshToken) {
         this(username, clientID, clientSecret, accessToken,
              refreshToken, "SHOOT-");
     }
 
-    public GoogleOAuth2Credentials(String username,
-                                   String clientID,
-                                   String clientSecret,
-                                   String accessToken,
-                                   String refreshToken,
-                                   String resource) {
-        if (!username.contains("@")) {
-            username += "@gmail.com";
+    public GoogleOAuth2Credentials(final String username,
+                                   final String clientID,
+                                   final String clientSecret,
+                                   final String accessToken,
+                                   final String refreshToken,
+                                   final String resource) {
+        if (StringUtils.isNotBlank(username) && !username.contains("@")) {
+            this.username = username + "@gmail.com";
+        } else {
+            this.username = username;
         }
-        this.username = username;
         this.clientID = clientID;
         this.clientSecret = clientSecret;
         this.accessToken = accessToken;
@@ -46,32 +53,40 @@ public class GoogleOAuth2Credentials implements XmppCredentials, CallbackHandler
         this.resource = resource;
     }
 
+    @Override
     public String getUsername() {
         return username;
     }
 
+    @Override
     public String getKey() {
         return username + refreshToken;
     }
 
-    public XMPPConnection createConnection(ConnectionConfiguration config) {
+    @Override
+    public XMPPConnection createConnection(
+        final ConnectionConfiguration config) {
         config.setCallbackHandler(this);
-        XMPPConnection conn = new XMPPConnection(config);
-        conn.getSASLAuthentication().supportSASLMechanism("X-OAUTH2");
+        final XMPPConnection conn = new XMPPConnection(config);
+        
+        // This just adds oauth2 to the mechanisms we support.
+        SASLAuthentication.supportSASLMechanism("X-OAUTH2");
         return conn;
     }
 
-    public void login(XMPPConnection conn) throws XMPPException {
+    @Override
+    public void login(final XMPPConnection conn) throws XMPPException {
         conn.login(username, null, resource);
     }
 
-    public void handle(Callback[] callbacks)
-                              throws IOException,
-                                     UnsupportedCallbackException {
-        for (Callback cb : callbacks) {
+    @Override
+    public void handle(final Callback[] callbacks) throws IOException,
+        UnsupportedCallbackException {
+        for (final Callback cb : callbacks) {
             if (cb instanceof TextInputCallback) {
-                TextInputCallback ticb = (TextInputCallback)cb;
-                String prompt = ticb.getPrompt();
+                final TextInputCallback ticb = (TextInputCallback)cb;
+                final String prompt = ticb.getPrompt();
+                log.info("Got prompt: {}", prompt);
                 if (prompt == "clientID") {
                     ticb.setText(clientID);
                 } else if (prompt == "clientSecret") {
@@ -87,6 +102,15 @@ public class GoogleOAuth2Credentials implements XmppCredentials, CallbackHandler
                 throw new UnsupportedCallbackException(cb, "Unsupported callback type.");
             }
         }
+    }
+    
+
+    @Override
+    public String toString() {
+        return "GoogleOAuth2Credentials [username=" + username + ", resource="
+                + resource + ", clientID=" + clientID + ", clientSecret="
+                + clientSecret + ", accessToken=" + accessToken
+                + ", refreshToken=" + refreshToken + "]";
     }
 }
 
