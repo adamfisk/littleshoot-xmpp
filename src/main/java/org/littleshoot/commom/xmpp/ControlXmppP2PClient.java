@@ -48,6 +48,8 @@ import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
 import org.lastbamboo.common.p2p.P2PConnectionEvent;
 import org.lastbamboo.common.p2p.P2PConnectionListener;
 import org.lastbamboo.common.p2p.P2PConstants;
+import org.lastbamboo.common.p2p.PortMappingState;
+import org.lastbamboo.common.p2p.SocketType;
 import org.littleshoot.mina.common.ByteBuffer;
 import org.littleshoot.util.CommonUtils;
 import org.littleshoot.util.KeyStorage;
@@ -236,7 +238,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         // If the remote host has their ports mapped, we just use those.
         if (streamDesc.isTcp() && urisToMappedServers.containsKey(uri)) {
             log.info("USING MAPPED PORT SERVER!");
-            return newMappedServerSocket(uri, raw);
+            return newConnectionToMappedServerSocket(uri, raw);
         }
 
         final SSLSocket control = controlSocket(uri, streamDesc);
@@ -250,7 +252,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             // any case to avoid getting into weird states with socket
             // negotiation on both the local and the remote sides.
             IOUtils.closeQuietly(control);
-            return newMappedServerSocket(uri, raw);
+            return newConnectionToMappedServerSocket(uri, raw);
         }
 
         // Note we use a short timeout for waiting for answers. This is
@@ -278,8 +280,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         */
     }
 
-    private Socket newMappedServerSocket(final URI uri, final boolean raw)
-        throws IOException {
+    private Socket newConnectionToMappedServerSocket(final URI uri, 
+        final boolean raw) throws IOException {
         final InetSocketAddress serverIp = urisToMappedServers.get(uri);
         final Socket sock;
         if (raw) {
@@ -291,8 +293,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
         try {
             sock.connect(serverIp, 40 * 1000);
+            notifyConnectionListeners(uri, sock, false, true, 
+                PortMappingState.MAPPED, SocketType.TCP);
             return sock;
         } catch (final IOException e) {
+            // We should also record the failed connection attempt here.
             log.info("Could not connect -- peer offline?", e);
             urisToMappedServers.remove(uri);
             throw e;
@@ -332,17 +337,22 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private final AtomicBoolean connecting = new AtomicBoolean(false);
 
     private void notifyConnectionListeners(final URI jid, final Socket sock,
-        final boolean incoming, final boolean connected) {
-        notifyConnectionListeners(jid.toASCIIString(), sock, incoming, connected);
+        final boolean incoming, final boolean connected, 
+        final PortMappingState mappingState, final SocketType socketType) {
+        notifyConnectionListeners(jid.toASCIIString(), sock, incoming, connected, 
+                mappingState, socketType);
     }
 
     private void notifyConnectionListeners(final String jid, final Socket sock,
-        final boolean incoming, final boolean connected) {
+        final boolean incoming, final boolean connected, 
+        final PortMappingState mappingState, 
+        final SocketType socketType) {
         final Runnable runner = new Runnable() {
             @Override
             public void run() {
                 final P2PConnectionEvent event =
-                    new P2PConnectionEvent(jid, sock, incoming, connected);
+                    new P2PConnectionEvent(jid, sock, incoming, connected, 
+                            mappingState, socketType);
                 synchronized (listeners) {
                     for (final P2PConnectionListener listener : listeners) {
                         listener.onConnectivityEvent(event);
@@ -388,7 +398,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         }
         */
 
-        notifyConnectionListeners(uri, sock, false, true);
+        notifyConnectionListeners(uri, sock, false, true, PortMappingState.UNKNOWN, SocketType.UNKNOWN);
         this.outgoingControlSockets.put(uri, sock);
         return (SSLSocket) sock;
     }
@@ -912,7 +922,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         @Override
         public void onTcpSocket(final Socket sock) {
             log.info("Got a TCP socket: {}", sock);
-            onControlSocket(sock);
+            onControlSocket(sock, SocketType.TCP);
         }
 
         @Override
@@ -922,15 +932,15 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             //        writeKey, readKey);
             //onSocket(new CipherSocket(sock, writeKey, readKey));
 
-            onControlSocket(sock);
+            onControlSocket(sock, SocketType.UDP);
         }
 
-        private void onControlSocket(final Socket sock) {
+        private void onControlSocket(final Socket sock, final SocketType socketType) {
             log.info("Got control socket on 'server' side: {}", sock);
             // We use one control socket for sending offers and another one
             // for receiving offers. This is an incoming socket for
             // receiving offers.
-            notifyConnectionListeners(this.fullJid, sock, true, true);
+            notifyConnectionListeners(this.fullJid, sock, true, true, PortMappingState.UNKNOWN , socketType);
             incomingControlSockets.put(this.fullJid, sock);
             try {
                 readInvites(sock);
@@ -939,12 +949,12 @@ public class ControlXmppP2PClient implements XmppP2PClient {
                     "whenever the other side closes the connection, which " +
                     "will happen all the time.", e);
                 IOUtils.closeQuietly(sock);
-                notifyConnectionListeners(this.fullJid, sock, true, false);
+                notifyConnectionListeners(this.fullJid, sock, true, false, PortMappingState.UNKNOWN, socketType);
                 incomingControlSockets.remove(this.fullJid);
             } catch (final SAXException e) {
                 log.info("Exception reading invites", e);
                 IOUtils.closeQuietly(sock);
-                notifyConnectionListeners(this.fullJid, sock, true, false);
+                notifyConnectionListeners(this.fullJid, sock, true, false, PortMappingState.UNKNOWN, socketType);
                 incomingControlSockets.remove(this.fullJid);
             }
         }
@@ -1029,7 +1039,8 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
 
     private void closeOutgoing(final URI uri, final Socket control) {
-        notifyConnectionListeners(uri, control, false, false);
+        notifyConnectionListeners(uri, control, false, false, 
+            PortMappingState.UNKNOWN, SocketType.UNKNOWN);
         IOUtils.closeQuietly(control);
         this.outgoingControlSockets.remove(uri);
     }
