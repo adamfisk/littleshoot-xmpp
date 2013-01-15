@@ -435,14 +435,14 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
 
     @Override
-    public String login(final XmppCredentials credentials)
+    public String login(final XmppCredentials creds)
         throws CredentialException, IOException {
-        return login(credentials, this.xmppServerHost, this.xmppServerPort,
+        return login(creds, this.xmppServerHost, this.xmppServerPort,
                      this.xmppServiceName);
     }
 
     @Override
-    public String login(final XmppCredentials credentials,
+    public String login(final XmppCredentials creds,
         final String serverHost, final int serverPort,
         final String serviceName)
         throws CredentialException, IOException {
@@ -450,7 +450,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
             throw new IOException("Already attempting connection");
         }
         this.loggedOut.set(false);
-        this.credentials = credentials;
+        this.credentials = creds;
         this.xmppServerHost = serverHost;
 
         if ("talk.google.com".equals(this.xmppServerHost)) {
@@ -468,7 +468,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
         this.connecting.set(true);
         try {
             this.xmppConnection = XmppUtils.persistentXmppConnection(
-                credentials, retries, this.xmppServerHost, this.xmppServerPort,
+                creds, retries, this.xmppServerHost, this.xmppServerPort,
                 this.xmppServiceName, this);
         } catch (final CredentialException e) {
             this.connecting.set(false);
@@ -628,13 +628,11 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     private final class TransactionData {
 
         private final OfferAnswerTransactionListener transactionListener;
-        private final KeyStorage keyStorage;
 
         private TransactionData(
             final OfferAnswerTransactionListener transactionListener,
             final KeyStorage keyStorage) {
             this.transactionListener = transactionListener;
-            this.keyStorage = keyStorage;
         }
 
     }
