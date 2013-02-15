@@ -404,7 +404,7 @@ public class XmppUtils {
             }
         });
         try {
-            final XMPPConnection conn = fut.get(40, TimeUnit.SECONDS);
+            final XMPPConnection conn = fut.get(60, TimeUnit.SECONDS);
             // Make sure we signify gchat support.
             XmppUtils.getSharedStatus(conn);
             return conn;
