@@ -19,10 +19,10 @@ import org.slf4j.LoggerFactory;
 public class XmppProtocolSocketFactory implements ProtocolSocketFactory {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private final SocketFactory socketFactory;
+    private final SocketFactory<Socket> socketFactory;
     private final DefaultXmppUriFactory xmppUriFactory;
     
-    public XmppProtocolSocketFactory(final SocketFactory socketFactory,
+    public XmppProtocolSocketFactory(final SocketFactory<Socket> socketFactory,
         final DefaultXmppUriFactory defaultXmppUriFactory) {
         this.socketFactory = socketFactory;
         this.xmppUriFactory = defaultXmppUriFactory;

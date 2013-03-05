@@ -78,7 +78,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
 
     private static final int TIMEOUT = 60 * 60 * 1000;
 
-    private final OfferAnswerFactory offerAnswerFactory;
+    private final OfferAnswerFactory<FiveTuple> offerAnswerFactory;
 
     private XMPPConnection xmppConnection;
 
@@ -127,27 +127,31 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
 
     private AtomicBoolean loggedOut = new AtomicBoolean(true);
 
+    private OfferAnswerListener<FiveTuple> answererListener;
+
 
     public static ControlEndpointXmppP2PClient newGoogleTalkDirectClient(
-        final OfferAnswerFactory factory,
+        final OfferAnswerFactory<FiveTuple> factory,
         final InetSocketAddress plainTextRelayAddress,
         final SessionSocketListener callSocketListener, final int relayWait,
-        final PublicIp publicIp, final SocketFactory socketFactory) {
+        final PublicIp publicIp, final SocketFactory socketFactory,
+        final OfferAnswerListener<FiveTuple> answererListener) {
         return new ControlEndpointXmppP2PClient(factory, plainTextRelayAddress,
             //callSocketListener, relayWait, "talk.google.com", 5222, "talk.google.com",
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com",
-            false, publicIp, socketFactory);
+            false, publicIp, socketFactory, answererListener);
     }
     
     public static ControlEndpointXmppP2PClient newClient(
-        final OfferAnswerFactory factory,
+        final OfferAnswerFactory<FiveTuple> factory,
         final InetSocketAddress plainTextRelayAddress, 
         final SessionSocketListener callSocketListener, final int relayWait,
         final PublicIp publicIp, final SocketFactory socketFactory,
-        final String host, final int port, final String serviceName) {
+        final String host, final int port, final String serviceName,
+        final OfferAnswerListener<FiveTuple> answererListener) {
         return new ControlEndpointXmppP2PClient(factory, plainTextRelayAddress, 
             callSocketListener, relayWait, host, port, serviceName, 
-            false, publicIp, socketFactory);
+            false, publicIp, socketFactory, answererListener);
     }
 
     /*
@@ -162,12 +166,14 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
     }
     */
 
-    private ControlEndpointXmppP2PClient(final OfferAnswerFactory offerAnswerFactory,
+    private ControlEndpointXmppP2PClient(
+        final OfferAnswerFactory<FiveTuple> offerAnswerFactory,
         final InetSocketAddress plainTextRelayAddress,
         final SessionSocketListener callSocketListener,
         final int relayWaitTime, final String host, final int port,
         final String serviceName, final boolean useRelay,
-        final PublicIp publicIp, final SocketFactory socketFactory) {
+        final PublicIp publicIp, final SocketFactory socketFactory,
+        final OfferAnswerListener<FiveTuple> answererListener) {
         this.offerAnswerFactory = offerAnswerFactory;
         this.plainTextRelayAddress = plainTextRelayAddress;
         this.callSocketListener = callSocketListener;
@@ -179,6 +185,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
         this.useRelay = useRelay;
         this.publicIp = publicIp;
         this.socketFactory = socketFactory;
+        this.answererListener = answererListener;
     }
 
     @Override
@@ -1010,9 +1017,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
 
         try {
             offerAnswer = this.offerAnswerFactory.createAnswerer(
-                new AnswererOfferAnswerListener("",
-                    this.plainTextRelayAddress, callSocketListener,
-                    offerString), this.useRelay);
+                    answererListener, this.useRelay);
         }
         catch (final OfferAnswerConnectException e) {
             // This indicates we could not establish the necessary connections
