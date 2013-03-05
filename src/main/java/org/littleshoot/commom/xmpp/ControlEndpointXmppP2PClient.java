@@ -34,7 +34,6 @@ import org.jivesoftware.smack.filter.PacketFilter;
 import org.jivesoftware.smack.filter.PacketTypeFilter;
 import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Packet;
-import org.lastbamboo.common.offer.answer.AnswererOfferAnswerListener;
 import org.lastbamboo.common.offer.answer.IceMediaStreamDesc;
 import org.lastbamboo.common.offer.answer.NoAnswerException;
 import org.lastbamboo.common.offer.answer.OfferAnswer;
@@ -44,6 +43,7 @@ import org.lastbamboo.common.offer.answer.OfferAnswerListener;
 import org.lastbamboo.common.offer.answer.OfferAnswerMessage;
 import org.lastbamboo.common.offer.answer.OfferAnswerTransactionListener;
 import org.lastbamboo.common.offer.answer.Offerer;
+import org.lastbamboo.common.p2p.DefaultTcpUdpEndpoint;
 import org.lastbamboo.common.p2p.DefaultTcpUdpSocket;
 import org.lastbamboo.common.p2p.P2PConnectionEvent;
 import org.lastbamboo.common.p2p.P2PConnectionListener;
@@ -66,7 +66,7 @@ import org.xml.sax.SAXException;
 /**
  * Default implementation of an XMPP P2P client connection.
  */
-public class ControlEndpointXmppP2PClient implements XmppP2PClient {
+public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -189,7 +189,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
     }
 
     @Override
-    public Socket newSocket(final URI uri)
+    public FiveTuple newSocket(final URI uri)
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         if (useRelay) {
@@ -199,7 +199,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
     }
 
     @Override
-    public Socket newUnreliableSocket(final URI uri)
+    public FiveTuple newUnreliableSocket(final URI uri)
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         if (useRelay) {
@@ -211,7 +211,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
     }
 
     @Override
-    public Socket newRawSocket(final URI uri)
+    public FiveTuple newRawSocket(final URI uri)
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         if (useRelay) {
@@ -221,7 +221,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
     }
 
     @Override
-    public Socket newRawUnreliableSocket(final URI uri)
+    public FiveTuple newRawUnreliableSocket(final URI uri)
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
         if (useRelay) {
@@ -232,7 +232,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
             IceMediaStreamDesc.newUnreliableUdpStreamNoRelay(), true);
     }
 
-    private Socket newSocket(final URI uri,
+    private FiveTuple newSocket(final URI uri,
         final IceMediaStreamDesc streamDesc, final boolean raw)
         throws IOException, NoAnswerException {
         log.trace ("Creating XMPP socket for URI: {}", uri);
@@ -266,14 +266,14 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
         // Note we use a short timeout for waiting for answers. This is
         // because we've seen XMPP messages get lost in the ether, and we
         // just want to send a few of them quickly when this does happen.
-        final DefaultTcpUdpSocket tcpUdpSocket =
-            new DefaultTcpUdpSocket(
+        final DefaultTcpUdpEndpoint tcpUdpSocket =
+            new DefaultTcpUdpEndpoint(
                 new OffererOverControlSocket(control, streamDesc),
                 this.offerAnswerFactory,
                 this.relayWaitTime, 20 * 1000, streamDesc);
 
         log.info("Trying to create new socket...raw="+raw);
-        final Socket sock = tcpUdpSocket.newSocket(uri);
+        final FiveTuple sock = tcpUdpSocket.newSocket(uri);
         return sock;
         /*
         if (raw || sock instanceof SSLSocket) {
@@ -288,9 +288,12 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
         */
     }
 
-    private Socket newConnectionToMappedServerSocket(final URI uri, 
+    private FiveTuple newConnectionToMappedServerSocket(final URI uri, 
         final boolean raw) throws IOException {
         final InetSocketAddress serverIp = urisToMappedServers.get(uri);
+        return new FiveTuple(null, serverIp, FiveTuple.Protocol.TCP);
+        
+        /*
         final Socket sock;
         if (raw) {
             log.info("Creating raw socket and skipping socket factory");
@@ -303,13 +306,13 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
             sock.connect(serverIp, 40 * 1000);
             notifyConnectionListeners(uri, sock, false, true, 
                 PortMappingState.MAPPED, SocketType.TCP);
-            return sock;
         } catch (final IOException e) {
             // We should also record the failed connection attempt here.
             log.info("Could not connect -- peer offline?", e);
             urisToMappedServers.remove(uri);
             throw e;
         }
+        */
     }
 
     private SSLSocket controlSocket(final URI uri,
@@ -406,7 +409,8 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient {
         }
         */
 
-        notifyConnectionListeners(uri, sock, false, true, PortMappingState.UNKNOWN, SocketType.UNKNOWN);
+        notifyConnectionListeners(uri, sock, false, true, 
+                PortMappingState.UNKNOWN, SocketType.UNKNOWN);
         this.outgoingControlSockets.put(uri, sock);
         return (SSLSocket) sock;
     }

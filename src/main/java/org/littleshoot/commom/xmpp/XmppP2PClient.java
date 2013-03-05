@@ -11,7 +11,7 @@ import org.lastbamboo.common.p2p.P2PClient;
 /**
  * P2P client interface for XMPP clients.
  */
-public interface XmppP2PClient extends P2PClient {
+public interface XmppP2PClient<T> extends P2PClient<T> {
 
     XMPPConnection getXmppConnection();
     
