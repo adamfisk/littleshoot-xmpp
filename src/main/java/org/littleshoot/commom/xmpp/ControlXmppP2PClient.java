@@ -897,7 +897,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
 
     private final class ControlSocketOfferAnswerListener
-        implements OfferAnswerListener {
+        implements OfferAnswerListener<Socket> {
 
         private final String fullJid;
         //private final byte[] readKey;
