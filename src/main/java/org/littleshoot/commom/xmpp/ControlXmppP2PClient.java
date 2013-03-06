@@ -65,7 +65,7 @@ import org.xml.sax.SAXException;
 /**
  * Default implementation of an XMPP P2P client connection.
  */
-public class ControlXmppP2PClient implements XmppP2PClient {
+public class ControlXmppP2PClient implements XmppP2PClient<Socket> {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -77,7 +77,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
     private static final int TIMEOUT = 60 * 60 * 1000;
 
-    private final OfferAnswerFactory offerAnswerFactory;
+    private final OfferAnswerFactory<Socket> offerAnswerFactory;
 
     private XMPPConnection xmppConnection;
 
@@ -128,7 +128,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
 
 
     public static ControlXmppP2PClient newGoogleTalkDirectClient(
-        final OfferAnswerFactory factory,
+        final OfferAnswerFactory<Socket> factory,
         final InetSocketAddress plainTextRelayAddress,
         final SessionSocketListener callSocketListener, final int relayWait,
         final PublicIp publicIp, final SocketFactory socketFactory) {
@@ -139,7 +139,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
     
     public static ControlXmppP2PClient newClient(
-        final OfferAnswerFactory factory,
+        final OfferAnswerFactory<Socket> factory,
         final InetSocketAddress plainTextRelayAddress, 
         final SessionSocketListener callSocketListener, final int relayWait,
         final PublicIp publicIp, final SocketFactory socketFactory,
@@ -161,7 +161,7 @@ public class ControlXmppP2PClient implements XmppP2PClient {
     }
     */
 
-    private ControlXmppP2PClient(final OfferAnswerFactory offerAnswerFactory,
+    private ControlXmppP2PClient(final OfferAnswerFactory<Socket> offerAnswerFactory,
         final InetSocketAddress plainTextRelayAddress,
         final SessionSocketListener callSocketListener,
         final int relayWaitTime, final String host, final int port,

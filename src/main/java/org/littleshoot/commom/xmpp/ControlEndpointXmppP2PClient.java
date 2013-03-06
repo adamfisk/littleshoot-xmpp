@@ -129,14 +129,17 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
 
     private OfferAnswerListener<FiveTuple> answererListener;
 
+    private OfferAnswerFactory<Socket> socketAnswerFactory;
+
 
     public static ControlEndpointXmppP2PClient newGoogleTalkDirectClient(
         final OfferAnswerFactory<FiveTuple> factory,
+        final OfferAnswerFactory<Socket> socketAnswerFactory,
         final InetSocketAddress plainTextRelayAddress,
         final SessionSocketListener callSocketListener, final int relayWait,
         final PublicIp publicIp, final SocketFactory socketFactory,
         final OfferAnswerListener<FiveTuple> answererListener) {
-        return new ControlEndpointXmppP2PClient(factory, plainTextRelayAddress,
+        return new ControlEndpointXmppP2PClient(factory, socketAnswerFactory, plainTextRelayAddress,
             //callSocketListener, relayWait, "talk.google.com", 5222, "talk.google.com",
             callSocketListener, relayWait, "talk.google.com", 5222, "gmail.com",
             false, publicIp, socketFactory, answererListener);
@@ -144,12 +147,13 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
     
     public static ControlEndpointXmppP2PClient newClient(
         final OfferAnswerFactory<FiveTuple> factory,
+        final OfferAnswerFactory<Socket> socketAnswerFactory,
         final InetSocketAddress plainTextRelayAddress, 
         final SessionSocketListener callSocketListener, final int relayWait,
         final PublicIp publicIp, final SocketFactory socketFactory,
         final String host, final int port, final String serviceName,
         final OfferAnswerListener<FiveTuple> answererListener) {
-        return new ControlEndpointXmppP2PClient(factory, plainTextRelayAddress, 
+        return new ControlEndpointXmppP2PClient(factory, socketAnswerFactory, plainTextRelayAddress, 
             callSocketListener, relayWait, host, port, serviceName, 
             false, publicIp, socketFactory, answererListener);
     }
@@ -168,6 +172,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
 
     private ControlEndpointXmppP2PClient(
         final OfferAnswerFactory<FiveTuple> offerAnswerFactory,
+        final OfferAnswerFactory<Socket> socketAnswerFactory,
         final InetSocketAddress plainTextRelayAddress,
         final SessionSocketListener callSocketListener,
         final int relayWaitTime, final String host, final int port,
@@ -175,6 +180,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
         final PublicIp publicIp, final SocketFactory socketFactory,
         final OfferAnswerListener<FiveTuple> answererListener) {
         this.offerAnswerFactory = offerAnswerFactory;
+        this.socketAnswerFactory = socketAnswerFactory;
         this.plainTextRelayAddress = plainTextRelayAddress;
         this.callSocketListener = callSocketListener;
         this.relayWaitTime = relayWaitTime;
@@ -378,7 +384,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
         final IceMediaStreamDesc streamDesc) throws IOException,
         NoAnswerException {
         final DefaultTcpUdpSocket tcpUdpSocket =
-            new DefaultTcpUdpSocket(this, this.offerAnswerFactory,
+            new DefaultTcpUdpSocket(this, socketAnswerFactory,
                 this.relayWaitTime, 30 * 1000, streamDesc);
 
         final Socket rawSock = tcpUdpSocket.newSocket(uri);
