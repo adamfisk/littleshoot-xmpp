@@ -918,13 +918,9 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
         implements OfferAnswerListener<Socket> {
 
         private final String fullJid;
-        //private final byte[] readKey;
-        //private final byte[] writeKey;
 
         public ControlSocketOfferAnswerListener(final String fullJid) {
-            //this.readKey = readKey;
-            //this.writeKey = writeKey;
-            log.info("Creating listener on answerwer with full JID: {}",
+            log.debug("Creating listener on answerwer with full JID: {}",
                 fullJid);
             this.fullJid = fullJid;
         }
@@ -932,27 +928,23 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
         @Override
         public void onOfferAnswerFailed(final OfferAnswer offerAnswer) {
             // The following will often happen for one of TCP or UDP.
-            log.info("TCP or UDP offer answer failed: {}", offerAnswer);
+            log.debug("TCP or UDP offer answer failed: {}", offerAnswer);
         }
 
         @Override
         public void onTcpSocket(final Socket sock) {
-            log.info("Got a TCP socket: {}", sock);
+            log.debug("Got a TCP socket: {}", sock);
             onControlSocket(sock);
         }
 
         @Override
         public void onUdpSocket(final Socket sock) {
-            log.info("Got a UDP socket: {}", sock);
-            //log.info("Creating new CipherSocket with write key {} and read key {}",
-            //        writeKey, readKey);
-            //onSocket(new CipherSocket(sock, writeKey, readKey));
-
+            log.debug("Got a UDP socket: {}", sock);
             onControlSocket(sock);
         }
 
         private void onControlSocket(final Socket tuple) {
-            log.info("Got control socket on 'server' side: {}", tuple);
+            log.debug("Got control socket on 'server' side: {}", tuple);
             // We use one control socket for sending offers and another one
             // for receiving offers. This is an endpoint where we'll receive
             // offers.
@@ -976,15 +968,15 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
         private void readInvites(final Socket sock) throws IOException,
             SAXException {
             
-            log.info("Got control tuple!!");
+            log.debug("Got control tuple!!");
             final InputStream is = sock.getInputStream();
-            log.info("Reading streams from remote address: {}",
+            log.debug("Reading streams from remote address: {}",
                  sock.getRemoteSocketAddress());
-            log.info("Reading answerer invites on input stream: {}", is);
+            log.debug("Reading answerer invites on input stream: {}", is);
             while (true) {
                 // This will parse the full XML/XMPP message and extract the
                 // SDP from it.
-                log.info("Trying to read next offer on control socket...");
+                log.debug("Trying to read next offer on control socket...");
                 final Document doc = XmlUtils.toDoc(is, "</message>");
                 log.info("Got XML INVITE: {}", XmlUtils.toString(doc));
 
