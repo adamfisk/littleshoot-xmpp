@@ -73,12 +73,14 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
     private final Map<Long, TransactionData> transactionIdsToProcessors =
         new ConcurrentHashMap<Long, TransactionData>();
 
-    private static final Map<String, FiveTuple> incomingControlSockets =
-        new ConcurrentHashMap<String, FiveTuple>();
+    private static final Map<String, Socket> incomingControlSockets =
+        new ConcurrentHashMap<String, Socket>();
 
     private static final int TIMEOUT = 60 * 60 * 1000;
 
     private final OfferAnswerFactory<FiveTuple> offerAnswerFactory;
+    
+    private final OfferAnswerFactory<Socket> socketOfferAnswerFactory;
 
     private XMPPConnection xmppConnection;
 
@@ -129,8 +131,6 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
 
     private OfferAnswerListener<FiveTuple> answererListener;
 
-    private OfferAnswerFactory<Socket> socketAnswerFactory;
-
 
     public static ControlEndpointXmppP2PClient newGoogleTalkDirectClient(
         final OfferAnswerFactory<FiveTuple> factory,
@@ -180,7 +180,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
         final PublicIp publicIp, final SocketFactory socketFactory,
         final OfferAnswerListener<FiveTuple> answererListener) {
         this.offerAnswerFactory = offerAnswerFactory;
-        this.socketAnswerFactory = socketAnswerFactory;
+        this.socketOfferAnswerFactory = socketAnswerFactory;
         this.plainTextRelayAddress = plainTextRelayAddress;
         this.callSocketListener = callSocketListener;
         this.relayWaitTime = relayWaitTime;
@@ -384,7 +384,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
         final IceMediaStreamDesc streamDesc) throws IOException,
         NoAnswerException {
         final DefaultTcpUdpSocket tcpUdpSocket =
-            new DefaultTcpUdpSocket(this, socketAnswerFactory,
+            new DefaultTcpUdpSocket(this, socketOfferAnswerFactory,
                 this.relayWaitTime, 30 * 1000, streamDesc);
 
         final Socket rawSock = tcpUdpSocket.newSocket(uri);
@@ -598,7 +598,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
 
         final OfferAnswer offerAnswer;
         try {
-            offerAnswer = this.offerAnswerFactory.createAnswerer(
+            offerAnswer = this.socketOfferAnswerFactory.createAnswerer(
                 new ControlSocketOfferAnswerListener(msg.getFrom()), false);
         }
         catch (final OfferAnswerConnectException e) {
@@ -915,7 +915,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
     }
 
     private final class ControlSocketOfferAnswerListener
-        implements OfferAnswerListener<FiveTuple> {
+        implements OfferAnswerListener<Socket> {
 
         private final String fullJid;
         //private final byte[] readKey;
@@ -936,13 +936,13 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
         }
 
         @Override
-        public void onTcpSocket(final FiveTuple sock) {
+        public void onTcpSocket(final Socket sock) {
             log.info("Got a TCP socket: {}", sock);
             onControlSocket(sock);
         }
 
         @Override
-        public void onUdpSocket(final FiveTuple sock) {
+        public void onUdpSocket(final Socket sock) {
             log.info("Got a UDP socket: {}", sock);
             //log.info("Creating new CipherSocket with write key {} and read key {}",
             //        writeKey, readKey);
@@ -951,7 +951,7 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
             onControlSocket(sock);
         }
 
-        private void onControlSocket(final FiveTuple tuple) {
+        private void onControlSocket(final Socket tuple) {
             log.info("Got control socket on 'server' side: {}", tuple);
             // We use one control socket for sending offers and another one
             // for receiving offers. This is an endpoint where we'll receive
@@ -973,11 +973,10 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
             }
         }
 
-        private void readInvites(final FiveTuple tuple) throws IOException,
+        private void readInvites(final Socket sock) throws IOException,
             SAXException {
             
             log.info("Got control tuple!!");
-            /*
             final InputStream is = sock.getInputStream();
             log.info("Reading streams from remote address: {}",
                  sock.getRemoteSocketAddress());
@@ -997,7 +996,6 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
                     ByteBuffer.wrap(Base64.decodeBase64(sdp));
                 processInviteOverControlSocket(offer, sock, from);
             }
-            */
         }
     }
 
