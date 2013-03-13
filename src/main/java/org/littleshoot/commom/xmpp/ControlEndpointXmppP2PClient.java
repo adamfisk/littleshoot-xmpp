@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLHandshakeException;
-import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSocket;
 import javax.security.auth.login.CredentialException;
 
