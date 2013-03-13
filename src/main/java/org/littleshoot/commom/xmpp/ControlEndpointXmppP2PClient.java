@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.SocketFactory;
+import javax.net.ssl.SSLHandshakeException;
 import javax.net.ssl.SSLSocket;
 import javax.security.auth.login.CredentialException;
 
@@ -821,9 +822,13 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
                 // socket is broken for some reason.
                 try {
                     writeToControlSocket(xml);
+                } catch (final SSLHandshakeException e) {
+                    log.warn("SSL error creating control socket? Try:" +
+                        "System.setProperty(\"javax.net.debug\", \"ssl:record\");", e);
+                    closeOutgoing(uri, control);
                 } catch (final IOException e) {
                     closeOutgoing(uri, control);
-                    log.info("Control socket timed out? We'll try to " +
+                    log.debug("Control socket timed out? We'll try to " +
                         "establish a new one", e);
                     try {
                         this.control = establishControlSocket(uri, streamDesc);
