@@ -8,6 +8,7 @@ import java.net.Socket;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSocket;
 import javax.security.auth.login.CredentialException;
 
@@ -389,10 +391,12 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
                 this.relayWaitTime, 30 * 1000, streamDesc);
 
         final Socket rawSock = tcpUdpSocket.newSocket(uri);
-        log.info("Raw sock class: {}", rawSock.getClass());
+        log.debug("Raw sock class: {}", rawSock.getClass());
         final SSLSocket sock = (SSLSocket) rawSock;
         sock.setSoTimeout(TIMEOUT);
-        log.info("Created control socket: {}", sock);
+        log.debug("Control socket cipher suites: {}",
+                Arrays.asList(((SSLSocket)sock).getEnabledCipherSuites()));
+        log.debug("Created control socket: {}", sock);
 
         /*
         final byte[] writeKey = tcpUdpSocket.getWriteKey();
