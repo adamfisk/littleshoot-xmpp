@@ -34,7 +34,7 @@ public class XmppConfig {
         return useDnsSec;
     }
 
-    public static void setRetyStrategy(
+    public static void setRetyStrategyFactory(
             final XmppConnectionRetyStrategyFactory connectionRetyStrategy) {
         XmppConfig.connectionRetyStrategyFactory = connectionRetyStrategy;
     }
