@@ -9,6 +9,8 @@ package org.littleshoot.commom.xmpp;
 public class XmppConfig {
 
     private static boolean useDnsSec = false;
+    private static XmppConnectionRetyStrategyFactory connectionRetyStrategyFactory = 
+            new DefaultXmppConnectionRetryStrategyFactory();
     
     private XmppConfig(){}
 
@@ -30,5 +32,14 @@ public class XmppConfig {
      */
     public static boolean isUseDnsSec() {
         return useDnsSec;
+    }
+
+    public static void setRetyStrategy(
+            final XmppConnectionRetyStrategyFactory connectionRetyStrategy) {
+        XmppConfig.connectionRetyStrategyFactory = connectionRetyStrategy;
+    }
+
+    public static XmppConnectionRetyStrategy newRetyStrategy() {
+        return connectionRetyStrategyFactory.newStrategy();
     }
 }

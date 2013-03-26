@@ -291,7 +291,8 @@ public class XmppUtils {
             }
         }
         XMPPException exc = null;
-        for (int i = 0; i < attempts; i++) {
+        final XmppConnectionRetyStrategy strategy = XmppConfig.newRetyStrategy();
+        while (strategy.retry()) {
             try {
                 LOG.debug("Attempting XMPP connection...");
                 final XMPPConnection conn =
@@ -307,11 +308,7 @@ public class XmppUtils {
             }
 
             // Gradual backoff.
-            try {
-                Thread.sleep(i * 200);
-            } catch (final InterruptedException e) {
-                LOG.info("Interrupted?", e);
-            }
+            strategy.sleep();
         }
         if (exc != null) {
             throw new IOException("Could not log in!!", exc);
