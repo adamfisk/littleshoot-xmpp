@@ -124,10 +124,10 @@ public class XmppUtils {
         try {
             doc = XmlUtils.toDoc(xml);
         } catch (final IOException e) {
-            LOG.warn("Could not lookup Google STUN servers");
+            LOG.info("Could not lookup Google STUN servers");
             return Collections.emptyList();
         } catch (final SAXException e) {
-            LOG.warn("Could not lookup Google STUN servers");
+            LOG.info("Could not lookup Google STUN servers");
             return Collections.emptyList();
         }
         final XPathUtils xpath = XPathUtils.newXPath(doc);
@@ -577,7 +577,7 @@ public class XmppUtils {
 
             @Override
             public void connectionClosedOnError(final Exception e) {
-                LOG.warn("XMPP connection closed on error", e);
+                LOG.info("XMPP connection closed on error", e);
                 handleClose();
             }
 
@@ -686,7 +686,7 @@ public class XmppUtils {
         final Packet pack =
             getGTalkProperty(conn, "<query xmlns='google:jingleinfo'/>");
         if (pack == null) {
-            LOG.warn("Did not get response to Google stun server request!");
+            LOG.info("Did not get response to Google stun server request!");
             return Collections.emptyList();
         }
         return extractStunServers(pack.toXML());
