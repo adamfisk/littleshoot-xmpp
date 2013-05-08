@@ -465,7 +465,8 @@ public class XmppUtils {
         final ConnectionConfiguration config, final Throwable t) 
         throws IOException {
         if (config.getProxy().getProxyType() == ProxyType.HTTP) {
-            LOG.debug("Config has proxy -- already tried proxy");
+            LOG.debug("Config has proxy -- already tried proxy: {}", 
+                config.getProxy().getProxyAddress()+":"+config.getProxy().getProxyPort());
             throw new IOException("Already tried proxy", t);
         }
         final ConnectionConfiguration proxyConfig = 

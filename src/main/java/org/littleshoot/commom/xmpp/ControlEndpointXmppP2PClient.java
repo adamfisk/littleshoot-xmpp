@@ -341,7 +341,8 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
                 if (!control.isClosed()) {
                     return control;
                 }
-                log.info("Establishing new control socket");
+                log.info("Establishing new control socket because control " +
+                    "socket is closed!");
                 final SSLSocket newControl =
                     establishControlSocket(uri, streamDesc);
                 return newControl;
