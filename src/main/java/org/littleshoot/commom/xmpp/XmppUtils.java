@@ -372,16 +372,16 @@ public class XmppUtils {
     private static XMPPConnection singleXmppConnection(
         final XmppCredentials credentials, final String xmppServerHost,
         final int xmppServerPort, final String xmppServiceName,
-        final XmppP2PClient clientListener) throws XMPPException, IOException,
+        final XmppP2PClient clientListener) throws XMPPException,
         CredentialException {
         LOG.debug("Creating single connection with direct config...");
         final InetAddress server = getHost(xmppServerHost);
         final ConnectionConfiguration config;
-        if (getGlobalConfig() != null) {
-            config = getGlobalConfig();
-        } else {
+        //if (getGlobalConfig() != null) {
+         //   config = getGlobalConfig();
+        //} else {
             config = newConfig(server, xmppServerPort, xmppServiceName);
-        }
+        //}
         return singleXmppConnection(credentials, xmppServerHost, xmppServerPort, 
                 xmppServiceName, clientListener, config);
     }
@@ -472,9 +472,11 @@ public class XmppUtils {
         final ConnectionConfiguration proxyConfig = 
             getGlobalProxyConfig();
         if (proxyConfig == null) {
+            LOG.debug("Null global proxy config");
             throw new IOException("Could not use backup proxy", t);
         } 
         if (proxyConfig.getProxy() == null) {
+            LOG.debug("Null proxy in global proxy config");
             throw new IOException("Proxy config has no proxy!", t);
         }
         LOG.debug("Returning proxy config");
