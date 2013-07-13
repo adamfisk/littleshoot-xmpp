@@ -373,15 +373,15 @@ public class XmppUtils {
         final XmppCredentials credentials, final String xmppServerHost,
         final int xmppServerPort, final String xmppServiceName,
         final XmppP2PClient clientListener) throws XMPPException,
-        CredentialException {
+        CredentialException, IOException {
         LOG.debug("Creating single connection with direct config...");
         final InetAddress server = getHost(xmppServerHost);
         final ConnectionConfiguration config;
-        //if (getGlobalConfig() != null) {
-         //   config = getGlobalConfig();
-        //} else {
+        if (getGlobalConfig() != null) {
+            config = getGlobalConfig();
+        } else {
             config = newConfig(server, xmppServerPort, xmppServiceName);
-        //}
+        }
         return singleXmppConnection(credentials, xmppServerHost, xmppServerPort, 
                 xmppServiceName, clientListener, config);
     }
