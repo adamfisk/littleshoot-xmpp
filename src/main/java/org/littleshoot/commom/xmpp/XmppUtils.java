@@ -417,6 +417,7 @@ public class XmppUtils {
             if (cause instanceof XMPPException) {
                 LOG.debug("Processing XMPPException...");
                 final String msg = cause.getMessage();
+                LOG.debug("Got cause message: "+msg);
                 if (msg.startsWith("XMPPError connecting")) {
                 //final Throwable xmppCause = cause.getCause();
                 //LOG.info("xmppCause class: " + xmppCause.getClass());
@@ -425,7 +426,12 @@ public class XmppUtils {
                     return singleXmppConnection(credentials, xmppServerHost, 
                         xmppServerPort, xmppServiceName, clientListener, 
                         getProxyConfig(config, cause));
-                } 
+                } else if (msg.startsWith("Could not connect")) {
+                    LOG.debug("Trying backup server with XMPPException 'Could not connect'..");
+                    return singleXmppConnection(credentials, xmppServerHost, 
+                        xmppServerPort, xmppServiceName, clientListener, 
+                        getProxyConfig(config, cause));
+                }
                 /*
                 if (xmppCause instanceof XMPPException) {
                     LOG.debug("Trying backup server with XMPPException...");
