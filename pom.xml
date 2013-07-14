@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.littleshoot</groupId>
         <artifactId>parent</artifactId>
-        <version>1.0.3</version>
+        <version>1.0.4</version>
     </parent>
 
     <scm>
@@ -49,6 +49,7 @@
         <dependency>
             <groupId>org.littleshoot</groupId>
             <artifactId>dnssec4j</artifactId>
+            <version>0.1.5</version>
         </dependency>
 
         <dependency>
@@ -80,7 +81,7 @@
         <dependency>
             <groupId>org.littleshoot</groupId>
             <artifactId>smack-xmpp-3-2-2</artifactId>
-            <version>${ls.version}</version>
+            <version>1.0.6</version>
         </dependency> 
 
         <dependency>
