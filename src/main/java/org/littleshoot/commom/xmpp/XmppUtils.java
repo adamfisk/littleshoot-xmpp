@@ -42,7 +42,6 @@ import org.jivesoftware.smack.proxy.ProxyInfo.ProxyType;
 import org.jivesoftware.smackx.packet.VCard;
 import org.jivesoftware.smackx.provider.VCardProvider;
 import org.lastbamboo.common.p2p.P2PConstants;
-import org.littleshoot.dnssec4j.VerifiedAddressFactory;
 import org.littleshoot.util.xml.XPathUtils;
 import org.littleshoot.util.xml.XmlUtils;
 import org.slf4j.Logger;
@@ -322,10 +321,13 @@ public class XmppUtils {
         return conn.isAuthenticated() && conn.isConnected();
     }
 
-    private static InetAddress getHost(final String host) throws IOException {
+    /*
+    private static InetAddress getHost(final String host) 
+        throws UnknownHostException {
         return VerifiedAddressFactory.newVerifiedInetAddress(host,
             XmppConfig.isUseDnsSec());
     }
+    */
 
     public static void setGlobalConfig(final ConnectionConfiguration config) {
         XmppUtils.globalConfig = config;
@@ -375,12 +377,12 @@ public class XmppUtils {
         final XmppP2PClient clientListener) throws XMPPException,
         CredentialException, IOException {
         LOG.debug("Creating single connection with direct config...");
-        final InetAddress server = getHost(xmppServerHost);
         final ConnectionConfiguration config;
         if (getGlobalConfig() != null) {
             config = getGlobalConfig();
         } else {
-            config = newConfig(server, xmppServerPort, xmppServiceName);
+            config = newConfig(InetAddress.getByName(xmppServerHost), 
+                xmppServerPort, xmppServiceName);
         }
         return singleXmppConnection(credentials, xmppServerHost, xmppServerPort, 
                 xmppServiceName, clientListener, config);
@@ -390,8 +392,8 @@ public class XmppUtils {
         final XmppCredentials credentials, final String xmppServerHost,
         final int xmppServerPort, final String xmppServiceName,
         final XmppP2PClient clientListener, 
-        final ConnectionConfiguration config) throws XMPPException, IOException,
-        CredentialException {
+        final ConnectionConfiguration config) throws XMPPException,
+        CredentialException, IOException {
         LOG.debug("Creating single connection...");
         final Future<XMPPConnection> fut =
             connectors.submit(new Callable<XMPPConnection>() {
