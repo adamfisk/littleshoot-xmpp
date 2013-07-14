@@ -42,6 +42,7 @@ import org.jivesoftware.smack.proxy.ProxyInfo.ProxyType;
 import org.jivesoftware.smackx.packet.VCard;
 import org.jivesoftware.smackx.provider.VCardProvider;
 import org.lastbamboo.common.p2p.P2PConstants;
+import org.littleshoot.dnssec4j.VerifiedAddressFactory;
 import org.littleshoot.util.xml.XPathUtils;
 import org.littleshoot.util.xml.XmlUtils;
 import org.slf4j.Logger;
@@ -321,13 +322,11 @@ public class XmppUtils {
         return conn.isAuthenticated() && conn.isConnected();
     }
 
-    /*
     private static InetAddress getHost(final String host) 
         throws UnknownHostException {
         return VerifiedAddressFactory.newVerifiedInetAddress(host,
             XmppConfig.isUseDnsSec());
     }
-    */
 
     public static void setGlobalConfig(final ConnectionConfiguration config) {
         XmppUtils.globalConfig = config;
@@ -381,7 +380,7 @@ public class XmppUtils {
         if (getGlobalConfig() != null) {
             config = getGlobalConfig();
         } else {
-            config = newConfig(InetAddress.getByName(xmppServerHost), 
+            config = newConfig(getHost(xmppServerHost), 
                 xmppServerPort, xmppServiceName);
         }
         return singleXmppConnection(credentials, xmppServerHost, xmppServerPort, 
@@ -437,6 +436,13 @@ public class XmppUtils {
                 else {
                     throw (XMPPException)cause;
                 }
+            } else if (cause instanceof UnknownHostException) {
+                // If we can't connect, we should try our backup proxy if it 
+                // exists.
+                LOG.debug("Trying backup server...");
+                return singleXmppConnection(credentials, xmppServerHost, 
+                    xmppServerPort, xmppServiceName, clientListener, 
+                    getProxyConfig(config, cause));
             } else if (cause instanceof IOException) {
                 // If we can't connect, we should try our backup proxy if it 
                 // exists.
