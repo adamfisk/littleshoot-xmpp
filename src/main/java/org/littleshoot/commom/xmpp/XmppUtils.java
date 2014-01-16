@@ -561,11 +561,6 @@ public class XmppUtils {
         return config;
     }
 
-    private interface ConnectionHandler {
-        void setupConnection(XMPPConnection conn);
-        void login(XMPPConnection conn) throws XMPPException;
-    }
-
     private static XMPPConnection newConnection(
         final XmppCredentials credentials,
         final ConnectionConfiguration config,
@@ -575,6 +570,22 @@ public class XmppUtils {
         //config.setSecurityMode(SecurityMode.disabled);
         final XMPPConnection conn = credentials.createConnection(config);
         conn.connect();
+        
+
+        try {
+            credentials.login(conn);
+        } catch (final XMPPException e) {
+            //conn.disconnect();
+            final String msg = e.getMessage();
+            if (msg != null && msg.contains("No response from the server")) {
+                // This isn't necessarily a credentials issue -- try to catch
+                // non-credentials issues whenever we can.
+                throw e;
+            }
+            LOG.debug("Credentials error!", e);
+            throw new CredentialException("Authentication error");
+        }
+        
         conn.addConnectionListener(new ConnectionListener() {
 
             @Override
@@ -613,20 +624,6 @@ public class XmppUtils {
 
         LOG.debug("Connection is Secure: {}", conn.isSecureConnection());
         LOG.debug("Connection is TLS: {}", conn.isUsingTLS());
-
-        try {
-            credentials.login(conn);
-        } catch (final XMPPException e) {
-            //conn.disconnect();
-            final String msg = e.getMessage();
-            if (msg != null && msg.contains("No response from the server")) {
-                // This isn't necessarily a credentials issue -- try to catch
-                // non-credentials issues whenever we can.
-                throw e;
-            }
-            LOG.debug("Credentials error!", e);
-            throw new CredentialException("Authentication error");
-        }
 
         while (!isEstablished(conn)) {
             LOG.debug("Waiting for authentication");
