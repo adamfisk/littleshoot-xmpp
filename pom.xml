@@ -3,7 +3,7 @@
     <groupId>org.littleshoot</groupId>
     <artifactId>xmpp</artifactId>
     <packaging>jar</packaging>
-    <version>1.0.7</version>
+    <version>1.0.8-SNAPSHOT</version>
     <name>LittleShoot XMPP Wrapper</name>
     <url>http://www.littleshoot.org</url>
 
