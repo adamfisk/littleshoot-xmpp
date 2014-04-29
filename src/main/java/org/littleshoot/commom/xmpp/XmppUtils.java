@@ -383,16 +383,14 @@ public class XmppUtils {
             config = newConfig(getHost(xmppServerHost), 
                 xmppServerPort, xmppServiceName);
         }
-        return singleXmppConnection(credentials, xmppServerHost, xmppServerPort, 
-                xmppServiceName, clientListener, config);
+        return singleXmppConnection(credentials, clientListener, config);
     }
 
     private static XMPPConnection singleXmppConnection(
-        final XmppCredentials credentials, final String xmppServerHost,
-        final int xmppServerPort, final String xmppServiceName,
+        final XmppCredentials credentials,
         final XmppP2PClient clientListener, 
-        final ConnectionConfiguration config) throws XMPPException,
-        CredentialException, IOException {
+        final ConnectionConfiguration config) throws IOException, 
+        CredentialException, XMPPException {
         LOG.debug("Creating single connection...");
         final Future<XMPPConnection> fut =
             connectors.submit(new Callable<XMPPConnection>() {
@@ -409,65 +407,25 @@ public class XmppUtils {
         } catch (final InterruptedException e) {
             LOG.debug("Interrupted exception", e);
             throw new IOException("Interrupted during login!!", e);
+            
         } catch (final ExecutionException e) {
             LOG.debug("Execution error connecting", e);
             final Throwable cause = e.getCause();
-            LOG.debug("Cause", cause);
-            LOG.debug("Cause class: " + cause.getClass());
-            if (cause instanceof XMPPException) {
-                LOG.debug("Processing XMPPException...");
-                final String msg = cause.getMessage();
-                LOG.debug("Got cause message: "+msg);
-                if (msg.startsWith("XMPPError connecting")) {
-                //final Throwable xmppCause = cause.getCause();
-                //LOG.info("xmppCause class: " + xmppCause.getClass());
-                //if (xmppCause instanceof IOException) {
-                    LOG.debug("Trying backup server with XMPPException...");
-                    return singleXmppConnection(credentials, xmppServerHost, 
-                        xmppServerPort, xmppServiceName, clientListener, 
-                        getProxyConfig(config, cause));
-                } else if (msg.startsWith("Could not connect")) {
-                    LOG.debug("Trying backup server with XMPPException 'Could not connect'..");
-                    return singleXmppConnection(credentials, xmppServerHost, 
-                        xmppServerPort, xmppServiceName, clientListener, 
-                        getProxyConfig(config, cause));
-                }
-                /*
-                if (xmppCause instanceof XMPPException) {
-                    LOG.debug("Trying backup server with XMPPException...");
-                    return singleXmppConnection(credentials, xmppServerHost, 
-                        xmppServerPort, xmppServiceName, clientListener, 
-                        getProxyConfig(config, cause));
-                }*/
-                else {
-                    throw (XMPPException)cause;
-                }
-            } else if (cause instanceof UnknownHostException) {
-                // If we can't connect, we should try our backup proxy if it 
-                // exists.
-                LOG.debug("Trying backup server...");
-                return singleXmppConnection(credentials, xmppServerHost, 
-                    xmppServerPort, xmppServiceName, clientListener, 
-                    getProxyConfig(config, cause));
+            if (cause instanceof CredentialException) {
+                throw (CredentialException)cause;
             } else if (cause instanceof IOException) {
-                // If we can't connect, we should try our backup proxy if it 
-                // exists.
-                LOG.debug("Trying backup server...");
-                return singleXmppConnection(credentials, xmppServerHost, 
-                    xmppServerPort, xmppServiceName, clientListener, 
-                    getProxyConfig(config, cause));
+                throw (IOException)cause;
+            } else if (cause instanceof XMPPException) {
+                throw (XMPPException)cause;
             } else if (cause instanceof IllegalStateException) {
-                // This happens in Smack internally when it tries to add a 
+                // This happens in Smack internally when it tries to add a
                 // connection listener to an unconnected XMPP connection.
                 // See Connection.java
-                LOG.debug("Trying backup server...");
-                return singleXmppConnection(credentials, xmppServerHost, 
-                    xmppServerPort, xmppServiceName, clientListener, 
-                    getProxyConfig(config, cause));
-            } else if (cause instanceof CredentialException) {
-                throw (CredentialException)cause;
+                LOG.error("Attempted to add a connection listener to an " +
+                        "unconnected XMPP connection", cause);
+                throw new IOException("Adding listener to unconnected client?", e);
             } else {
-                throw new IllegalStateException ("Unrecognized cause", cause);
+                throw new RuntimeException("Unexpected error connecting to XMPP", cause);
             }
         } catch (final TimeoutException e) {
             LOG.info("Timeout exception", e);
