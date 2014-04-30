@@ -1120,8 +1120,8 @@ public class ControlEndpointXmppP2PClient implements XmppP2PClient<FiveTuple> {
     @Override
     public void handleClose() {
         if (isLoggedOut()) {
-            log.info("Not maintaining connection when the user has " +
-                "explictly logged out.");
+            log.info("Not maintaining connection because the user is " +
+                "logged out, possibly due to a stop call on internet disconnect.");
             return;
         }
         try {
